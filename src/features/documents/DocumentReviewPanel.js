@@ -1,0 +1,20 @@
+import React from 'react';
+import { Text, TextInput, View } from 'react-native';
+import { Button, Card, StatusBadge } from '../../components';
+import { confirmDocumentField } from '../../domain/documents/documentEvidence';
+import { CRITICAL_DOCUMENT_FIELDS, confirmReliableDocumentFields, getDocumentReviewSummary, updateExtractedFieldValue } from '../../domain/documents/documentReview';
+import { getTheme } from '../../theme/tokens';
+
+const labels = {
+  registrationNumber: 'Número de inscrição', vesselName: 'Nome da embarcação', vesselType: 'Tipo', registrationPort: 'Porto de inscrição', authorizedNavigationArea: 'Área de navegação', authorizedCapacity: 'Lotação autorizada', lengthMeters: 'Comprimento', grossTonnage: 'AB', ownerName: 'Proprietário', ownerTaxId: 'CPF/CNPJ', issueDate: 'Data de emissão', validUntil: 'Validade', category: 'Categoria', licenseNumber: 'Número da habilitação', holderName: 'Nome do titular',
+};
+
+const qualityLabel = (confidence) => confidence >= 0.9 ? 'Boa leitura' : confidence >= 0.75 ? 'Necessita conferência' : 'Baixa qualidade';
+
+export const DocumentReviewPanel = ({ evidence, darkMode, onChange, onApply }) => {
+  const { colors, radii, spacing, typography } = getTheme(darkMode);
+  const fields = evidence?.extractedFields || [];
+  if (!fields.length) return <Card darkMode={darkMode} variant="warning"><Text style={[typography.bodyStrong, { color: colors.text }]}>Reconhecimento automático indisponível</Text><Text style={[typography.caption, { color: colors.textMuted, marginTop: spacing.xs }]}>O documento foi preservado, mas nenhum campo foi reconhecido. Continue pelo preenchimento manual; a inspeção não será bloqueada.</Text></Card>;
+  const summary = getDocumentReviewSummary(evidence);
+  return <Card darkMode={darkMode} variant="outlined"><Text style={[typography.cardTitle, { color: colors.text }]}>Dados reconhecidos</Text><Text style={[typography.caption, { color: colors.textMuted, marginTop: spacing.xs }]}>{summary.confirmed} confirmados · {summary.pending} pendentes</Text>{fields.map((item) => { const critical = CRITICAL_DOCUMENT_FIELDS.includes(item.field); return <View key={item.field} style={{ marginTop: spacing.md, paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: colors.border }}><View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm }}><Text style={[typography.bodyStrong, { color: colors.text, flex: 1 }]}>{labels[item.field] || item.field}</Text><StatusBadge status={item.confirmedByUser ? 'conforme' : 'pendente'} darkMode={darkMode} /></View><TextInput value={item.value || ''} onChangeText={(value) => onChange(updateExtractedFieldValue(evidence, item.field, value))} placeholder="Não reconhecido" placeholderTextColor={colors.textMuted} style={[typography.body, { minHeight: 48, marginTop: spacing.sm, padding: spacing.md, borderRadius: radii.control, borderWidth: 1, borderColor: critical && !item.confirmedByUser ? colors.pending : colors.border, backgroundColor: colors.surfaceElevated, color: colors.text }]} /><Text style={[typography.caption, { color: critical ? colors.pending : colors.textMuted, marginTop: spacing.xs }]}>{qualityLabel(item.confidence)}{critical ? ' · conferência individual obrigatória' : ''}</Text><Button label={item.confirmedByUser ? 'Dado confirmado' : 'Confirmar este dado'} variant="secondary" disabled={!item.value || item.confirmedByUser} onPress={() => onChange(confirmDocumentField(evidence, item.field))} darkMode={darkMode} style={{ marginTop: spacing.sm }} /></View>; })}<Button label="Confirmar dados confiáveis" variant="secondary" onPress={() => onChange(confirmReliableDocumentFields(evidence))} darkMode={darkMode} style={{ marginTop: spacing.lg }} /><Button label="Confirmar e usar" disabled={!summary.canApply} onPress={onApply} darkMode={darkMode} style={{ marginTop: spacing.sm }} /><Text style={[typography.caption, { color: colors.textMuted, marginTop: spacing.sm }]}>Somente os campos conferidos serão usados para preencher a inspeção e recalcular sua aplicabilidade.</Text></Card>;
+};

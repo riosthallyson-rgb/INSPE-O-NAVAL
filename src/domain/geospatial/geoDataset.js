@@ -1,0 +1,3 @@
+export const createGeoDataset = ({ id, name, sourceId, sourceName, sourceDate, sourceVersion, geometryHash, createdAt, featureCount, coordinateSystem = 'WGS84', status = 'PENDING_VALIDATION' }) => ({ id, name, sourceId, sourceName, sourceDate, sourceVersion, geometryHash, createdAt, featureCount, coordinateSystem, status });
+
+export const createGeoNormativeRule = ({ id, sourceId, section, page, ruleType, geometryId = null, vesselTypes = [], activities = [], conditions = [], legalText, effectiveDate }) => ({ id, sourceId, section, page, ruleType, geometryId, vesselTypes, activities, conditions, legalText, effectiveDate, validationStatus: geometryId ? 'PENDING_VALIDATION' : 'TEXT_ONLY' });

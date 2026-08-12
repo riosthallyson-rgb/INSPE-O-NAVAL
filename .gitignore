@@ -1,0 +1,16 @@
+node_modules/
+.expo/
+.expo-shared/
+android/
+ios/
+*.log
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+.DS_Store
+web-build/
+dist/

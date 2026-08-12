@@ -1,0 +1,50 @@
+{
+  "name": "bizu-inspetor-naval",
+  "version": "1.0.0",
+  "private": true,
+  "main": "expo-router/entry",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "extract:pdfs": "node scripts/extract-pdfs.mjs",
+    "test": "jest --runInBand"
+  },
+  "dependencies": {
+    "expo": "~54.0.0",
+    "expo-asset": "~12.0.0",
+    "expo-camera": "~17.0.10",
+    "expo-constants": "~18.0.13",
+    "expo-crypto": "~15.0.9",
+    "expo-dev-client": "~6.0.21",
+    "expo-document-picker": "~14.0.8",
+    "expo-file-system": "~19.0.0",
+    "expo-image-picker": "~17.0.11",
+    "expo-linking": "~8.0.12",
+    "expo-location": "~19.0.8",
+    "expo-print": "~15.0.0",
+    "expo-router": "~6.0.24",
+    "expo-sharing": "~14.0.0",
+    "expo-status-bar": "~3.0.0",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "react-native": "0.81.5",
+    "react-native-maps": "1.20.1",
+    "react-native-safe-area-context": "~5.6.0",
+    "react-native-screens": "~4.16.0",
+    "react-native-web": "^0.21.0"
+  },
+  "devDependencies": {
+    "jest": "~29.7.0",
+    "jest-expo": "~54.0.17",
+    "pdf-parse": "^1.1.1",
+    "pdfjs-dist": "^6.2.108"
+  },
+  "jest": {
+    "preset": "jest-expo",
+    "testMatch": [
+      "**/tests/**/*.test.js"
+    ]
+  }
+}
