@@ -37,7 +37,8 @@ describe('Documentos Inteligentes', () => {
   test('preserva colunas do CTS', () => expect(parseCtsText('Mestre | MOC | 1')[0]).toMatchObject({ role: 'Mestre', category: 'MOC', quantity: '1' }));
   test('quantidade CTS inválida fica nula', () => expect(parseCtsText('Mestre | MOC | um')[0].quantity).toBeNull());
 
-  test('QR detectado não autentica documento', () => expect(applyQrDetection(evidence(), { detected: true, readable: true, data: 'conteúdo' })).toMatchObject({ qrState: 'QR_DATA_EXTRACTED', verificationState: 'OFFICIAL_VALIDATION_UNAVAILABLE' }));
+  test('QR legível em formato desconhecido não autentica nem inventa dados', () => expect(applyQrDetection(evidence(), { detected: true, readable: true, data: 'conteúdo' })).toMatchObject({ qrState: 'QR_READABLE', qrPayloadStatus: 'unrecognized', verificationState: 'OFFICIAL_VALIDATION_UNAVAILABLE', extractedFields: [] }));
+  test('QR estruturado extrai dados sem autenticar documento', () => expect(applyQrDetection(evidence(), { detected: true, readable: true, data: '{"registrationNumber":"00123"}' })).toMatchObject({ qrState: 'QR_DATA_EXTRACTED', qrPayloadStatus: 'parsed', verificationState: 'OFFICIAL_VALIDATION_UNAVAILABLE' }));
   test('provider ausente nunca confirma', async () => expect(await unavailableOfficialVerificationProvider.verifyDocument(evidence())).toMatchObject({ confirmed: false, state: 'OFFICIAL_VALIDATION_UNAVAILABLE' }));
   test('QR ausente permanece NO_QR', () => expect(applyQrDetection(evidence()).qrState).toBe('NO_QR'));
 
