@@ -1,0 +1,56 @@
+name: Apply Compass normative scope patch
+
+on:
+  push:
+    branches:
+      - 'agent/finaliza-inspetor-naval'
+    paths:
+      - '.github/workflows/compass-scope-patch.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/finaliza-inspetor-naval
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Restrict equipment answers to audited context
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('src/legal/compass/normativeCompassEngine.js')
+          source = path.read_text()
+          old = "  const equipmentTopic = /colete/.test(normalized) && /quantidade|lotacao|pessoa|quantos/.test(normalized) ? 'LIFEJACKETS' : /boia/.test(normalized) ? 'LIFEBUOYS' : /extintor/.test(normalized) ? 'EXTINGUISHER_DOTATION' : '';"
+          new = "  const recreationalScope = /esporte|recreio/.test(normalized) || inspection?.vessel?.vesselUse === 'Esporte e recreio';\n  const openSeaScope = /mar aberto/.test(normalized) || inspection?.vessel?.navigationArea === 'Mar aberto';\n  const equipmentTopic = /colete/.test(normalized) && /quantidade|lotacao|pessoa|quantos/.test(normalized) && recreationalScope ? 'LIFEJACKETS' : /boia/.test(normalized) && recreationalScope ? 'LIFEBUOYS' : /extintor/.test(normalized) && openSeaScope ? 'EXTINGUISHER_DOTATION' : '';"
+          count = source.count(old)
+          if count != 1:
+              raise SystemExit(f'Expected one equipmentTopic expression, found {count}')
+          path.write_text(source.replace(old, new))
+          PY
+      - name: Validate diff
+        run: git diff --check
+      - name: Run tests
+        run: npm test
+      - name: Validate Expo project
+        run: |
+          npx expo install --check
+          npx expo-doctor
+      - name: Commit validated scope correction
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/legal/compass/normativeCompassEngine.js
+          git commit -m "Restringe respostas normativas ao contexto auditado"
+          git push origin HEAD:agent/finaliza-inspetor-naval
