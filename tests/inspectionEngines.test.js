@@ -3,15 +3,27 @@ import { evaluateInspectionApplicability } from '../src/domain/inspection/inspec
 import { evaluateLegalFinding } from '../src/legal/engines/legalFindingEngine';
 
 describe('motores da inspeção assistida', () => {
-  test('considera emprego, navegação, estado e jurisdição sem anunciar fonte ausente como instalada', () => {
+  test('não usa jurisdição apenas herdada do perfil como regra regional confirmada', () => {
     const result = evaluateInspectionApplicability({
       vesselUse: 'Esporte e recreio', navigationArea: 'Interior', operationalState: 'Navegando', jurisdiction: 'CPPI',
     });
     expect(result.applicableNorms).toEqual(expect.arrayContaining(['normam-211', 'normam-301', 'normam-204']));
     expect(result.applicableNorms).not.toContain('normam-202');
     expect(result.applicableNorms).not.toContain('regional');
-    expect(result.missingSources).toEqual(expect.arrayContaining(['normam-202', 'regional']));
-    expect(result.checklistModules).toEqual(expect.arrayContaining(['regional', 'esporte_recreio']));
+    expect(result.missingSources).toContain('normam-202');
+    expect(result.missingSources).not.toContain('regional');
+    expect(result.checklistModules).toContain('esporte_recreio');
+    expect(result.checklistModules).not.toContain('regional');
+    expect(result.context.jurisdictionConfirmed).toBe(false);
+  });
+
+  test('habilita módulo regional somente com jurisdição explicitamente confirmada', () => {
+    const result = evaluateInspectionApplicability({
+      vesselUse: 'Pesca', navigationArea: 'Mar aberto', operationalState: 'Atracada', jurisdiction: 'CPPI', jurisdictionConfirmed: true,
+    });
+    expect(result.checklistModules).toContain('regional');
+    expect(result.missingSources).toContain('regional');
+    expect(result.context).toMatchObject({ jurisdiction: 'CPPI', jurisdictionConfirmed: true });
   });
 
   test('gera itens operacionais granulares sem apresentar fundamento pendente como oficial fora do contexto auditado', () => {
