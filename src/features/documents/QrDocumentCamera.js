@@ -14,9 +14,13 @@ export const QrDocumentCamera = ({ visible, darkMode, onClose, onScanned }) => {
   }, [visible]);
 
   const requestCamera = async () => {
-    const result = await requestPermission();
-    if (!result?.granted) {
-      Alert.alert('Câmera não autorizada', 'Ative a permissão de câmera nas configurações do aparelho para ler o QR Code ao vivo. Você ainda pode importar uma foto do documento.');
+    try {
+      const result = await requestPermission();
+      if (!result?.granted) {
+        Alert.alert('Câmera não autorizada', 'Ative a permissão de câmera nas configurações do aparelho para ler o QR Code ao vivo. Você ainda pode importar uma foto do documento.');
+      }
+    } catch (error) {
+      Alert.alert('Câmera indisponível', error?.message || 'Não foi possível solicitar acesso à câmera. Verifique as permissões do aparelho e tente novamente.');
     }
   };
 
@@ -51,7 +55,7 @@ export const QrDocumentCamera = ({ visible, darkMode, onClose, onScanned }) => {
               onBarcodeScanned={scanLocked ? undefined : handleScan}
             >
               <View pointerEvents="none" style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                <View style={{ width: 250, height: 250, borderWidth: 3, borderColor: colors.textOnPrimary || '#FFFFFF', borderRadius: radii.card }} />
+                <View style={{ width: '72%', maxWidth: 280, aspectRatio: 1, borderWidth: 3, borderColor: colors.onAction, borderRadius: radii.card }} />
               </View>
             </CameraView>
           </View>
