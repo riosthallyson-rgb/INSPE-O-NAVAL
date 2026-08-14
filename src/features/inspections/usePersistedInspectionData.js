@@ -12,6 +12,7 @@ const resolveStateValue = (currentValue, nextValue) =>
 export const usePersistedInspectionData = () => {
   const [inspectionData, setInspectionData] = useState(createEmptyPersistedState);
   const inspectionDataRef = useRef(inspectionData);
+  const persistQueue = useRef(Promise.resolve());
   const [storageHydrated, setStorageHydrated] = useState(false);
   const [storageError, setStorageError] = useState('');
   const [storageNotice, setStorageNotice] = useState('');
@@ -98,23 +99,30 @@ export const usePersistedInspectionData = () => {
       });
   }, [inspectionData, storageHydrated]);
 
-  const persistState = async (updater, errorMessage) => {
-    const current = inspectionDataRef.current;
-    const candidate = typeof updater === 'function' ? updater(current) : updater;
-    const nextState = migratePersistedState(candidate) || candidate;
-    setStorageStatus('saving');
-    try {
-      await saveStoredData(STORAGE_KEYS.APP_STATE, nextState);
-      replaceInspectionData(nextState, { skipAutomaticWrite: true });
-      setStorageError('');
-      setStorageStatus('saved');
-      setLastSavedAt(new Date().toISOString());
-      return nextState;
-    } catch (error) {
-      setStorageError(errorMessage);
-      setStorageStatus('error');
-      throw error;
-    }
+  const persistState = (updater, errorMessage) => {
+    const task = persistQueue.current
+      .catch(() => undefined)
+      .then(async () => {
+        const current = inspectionDataRef.current;
+        const candidate = typeof updater === 'function' ? updater(current) : updater;
+        const nextState = migratePersistedState(candidate) || candidate;
+        setStorageStatus('saving');
+        try {
+          await saveStoredData(STORAGE_KEYS.APP_STATE, nextState);
+          replaceInspectionData(nextState, { skipAutomaticWrite: true });
+          setStorageError('');
+          setStorageStatus('saved');
+          setLastSavedAt(new Date().toISOString());
+          return nextState;
+        } catch (error) {
+          setStorageError(errorMessage);
+          setStorageStatus('error');
+          throw error;
+        }
+      });
+
+    persistQueue.current = task;
+    return task;
   };
 
   const retrySave = async () => {
