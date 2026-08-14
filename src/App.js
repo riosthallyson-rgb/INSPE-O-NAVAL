@@ -66,6 +66,7 @@ export default function App() {
     setCurrentInspection,
     archiveInspection,
     saveVesselProfile,
+    startInspection,
     storageStatus,
     lastSavedAt,
     retrySave,
@@ -95,6 +96,7 @@ export default function App() {
   const [historyFilter, setHistoryFilter] = useState('');
   const [historyResultFilter, setHistoryResultFilter] = useState('Todos');
   const [globalSearchQuery, setGlobalSearchQuery] = useState('');
+  const [isFinishingInspection, setIsFinishingInspection] = useState(false);
 
   useEffect(() => {
     setProfileForm(inspectorProfile);
@@ -144,8 +146,8 @@ export default function App() {
       setIsEditingProfile(false);
       setProfileFeedback('Perfil salvo neste dispositivo.');
       setActiveTab('Início');
-    } catch {
-      return;
+    } catch (error) {
+      Alert.alert('Perfil', error?.message || 'Não foi possível salvar o perfil neste dispositivo.');
     } finally {
       setIsSavingProfile(false);
     }
@@ -283,7 +285,7 @@ export default function App() {
     setCurrentInspection((current) => {
       const linkedAt = new Date().toISOString();
       const vessel = { ...current.vessel, ...patch, documentEvidence: { ...documentEvidence, linkedToInspectionAt: linkedAt } };
-      const applicability = evaluateInspectionApplicability({ vesselType: vessel.type, vesselUse: vessel.vesselUse, navigationArea: vessel.navigationArea, operationalState: current.context.vesselOperationalState, length: vessel.lengthMeters, grossTonnage: vessel.grossTonnage, propulsion: vessel.propulsion, passengerCapacity: vessel.passengerCapacity, peopleOnBoard: current.occupancy.totalPersons, jurisdiction: current.inspector.jurisdiction });
+      const applicability = evaluateInspectionApplicability({ vesselType: vessel.type, vesselUse: vessel.vesselUse, navigationArea: vessel.navigationArea, operationalState: current.context.vesselOperationalState, length: vessel.lengthMeters, grossTonnage: vessel.grossTonnage, propulsion: vessel.propulsion, passengerCapacity: vessel.passengerCapacity, peopleOnBoard: current.occupancy.totalPersons, jurisdiction: current.context.jurisdictionConfirmedByUser ? current.context.jurisdictionId : '', jurisdictionConfirmed: current.context.jurisdictionConfirmedByUser });
       let next = { ...current, vessel, applicability };
       if (current.checkItems.length) next = { ...next, checklistRecalculationPending: true };
       next = appendAuditEvent(next, 'FIELDS_CONFIRMED', { fields: Object.keys(patch), count: Object.keys(patch).length }, linkedAt);
@@ -326,13 +328,19 @@ export default function App() {
     ]);
   };
 
-  const handleBeginAssistedInspection = () => {
+  const handleBeginAssistedInspection = async () => {
     if (!inspectorProfile.name.trim()) {
       Alert.alert('Perfil obrigatório', 'Preencha os dados do inspetor antes de iniciar uma Inspeção Naval.');
       setActiveTab('Início');
       return;
     }
-    setCurrentInspection(createInspectionDraft({ inspector: inspectorProfile, defaultVesselType: DEFAULT_VESSEL_TYPE }));
+    const draft = createInspectionDraft({ inspector: inspectorProfile, defaultVesselType: DEFAULT_VESSEL_TYPE });
+    try {
+      await startInspection(null, draft);
+      setActiveTab('Inspeção');
+    } catch (error) {
+      Alert.alert('Nova inspeção', error?.message || 'Não foi possível criar e salvar o rascunho neste dispositivo.');
+    }
   };
 
   const updateInspectionSection = (section, patch) => {
@@ -454,7 +462,7 @@ export default function App() {
     setCurrentInspection((current) => {
       let next = { ...current };
       if (current.currentStep === 4 && !current.documents.length) next.documents = buildDynamicDocuments(current);
-      if (current.currentStep === 5) next.applicability = evaluateInspectionApplicability({ vesselType: current.vessel.type, vesselUse: current.vessel.vesselUse, navigationArea: current.vessel.navigationArea, operationalState: current.context.vesselOperationalState, length: current.vessel.lengthMeters, grossTonnage: current.vessel.grossTonnage, propulsion: current.vessel.propulsion, passengerCapacity: current.vessel.passengerCapacity, peopleOnBoard: current.occupancy.totalPersons, jurisdiction: current.inspector.jurisdiction });
+      if (current.currentStep === 5) next.applicability = evaluateInspectionApplicability({ vesselType: current.vessel.type, vesselUse: current.vessel.vesselUse, navigationArea: current.vessel.navigationArea, operationalState: current.context.vesselOperationalState, length: current.vessel.lengthMeters, grossTonnage: current.vessel.grossTonnage, propulsion: current.vessel.propulsion, passengerCapacity: current.vessel.passengerCapacity, peopleOnBoard: current.occupancy.totalPersons, jurisdiction: current.context.jurisdictionConfirmedByUser ? current.context.jurisdictionId : '', jurisdictionConfirmed: current.context.jurisdictionConfirmedByUser });
       if (current.currentStep === 6 && !current.checkItems.length) next.checkItems = buildDynamicChecklist(current.applicability);
       next.currentStep = Math.min(10, current.currentStep + 1);
       next.stage = INSPECTION_STEPS[next.currentStep - 1];
@@ -464,10 +472,16 @@ export default function App() {
 
   const goBackAssistedInspection = () => setCurrentInspection((current) => appendAuditEvent({ ...current, currentStep: Math.max(1, current.currentStep - 1), stage: INSPECTION_STEPS[Math.max(1, current.currentStep - 1) - 1] }, 'STEP_CHANGED', { from: current.currentStep, to: Math.max(1, current.currentStep - 1) }));
 
-  const finishAssistedInspection = () => {
+  const finishAssistedInspection = async () => {
+    if (isFinishingInspection) return;
     const completedAt = new Date().toISOString();
     const completed = appendAuditEvent(completeFindingReview(currentInspection, completedAt), 'INSPECTION_COMPLETED', {}, completedAt);
-    finalizeInspection(completed);
+    setIsFinishingInspection(true);
+    try {
+      await finalizeInspection(completed);
+    } finally {
+      setIsFinishingInspection(false);
+    }
   };
 
   const handleAsk = async (questionOverride = question) => {
@@ -684,7 +698,7 @@ export default function App() {
             onDeleteHistory={removeCompassHistory}
             onSimulate={handleCompassSimulation}
             onContinueInspection={() => setActiveTab('Inspeção')}
-            onNewInspection={() => { setActiveTab('Inspeção'); handleBeginAssistedInspection(); }}
+            onNewInspection={handleBeginAssistedInspection}
           />
           </>
         )}
@@ -698,7 +712,8 @@ export default function App() {
             isCapturingLocation={isCapturingLocation}
             storageStatus={storageStatus}
             lastSavedAt={lastSavedAt}
-            onRetrySave={() => retrySave().catch(() => {})}
+            isFinishingInspection={isFinishingInspection}
+            onRetrySave={() => retrySave().catch((error) => Alert.alert('Salvar inspeção', error?.message || 'Não foi possível salvar a inspeção neste dispositivo.'))}
             onBegin={handleBeginAssistedInspection}
             onSelectVesselProfile={(profile) => updateInspectionSection('vessel', profile)}
             onCaptureTiePhoto={() => handleTiePhoto('camera')}

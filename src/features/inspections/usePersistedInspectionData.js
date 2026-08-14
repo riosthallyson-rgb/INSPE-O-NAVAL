@@ -172,14 +172,19 @@ export const usePersistedInspectionData = () => {
     'Não foi possível salvar o cadastro da embarcação neste dispositivo.',
   );
 
-  const startInspection = async (profile, inspection) => persistState(
-    (current) => ({
-      ...current,
-      vessels: upsertVesselProfile(current.vessels, profile),
-      currentInspection: inspection,
-    }),
-    'Não foi possível iniciar e salvar a inspeção neste dispositivo.',
-  );
+  const startInspection = async (profile, inspection) => {
+    const draft = inspection || profile;
+    const vesselProfile = inspection ? profile : null;
+    if (!draft) throw new Error('Rascunho de inspeção inválido.');
+    return persistState(
+      (current) => ({
+        ...current,
+        vessels: vesselProfile ? upsertVesselProfile(current.vessels, vesselProfile) : current.vessels,
+        currentInspection: draft,
+      }),
+      'Não foi possível iniciar e salvar a inspeção neste dispositivo.',
+    );
+  };
 
   const exportHistoryBackup = async () => {
     const current = inspectionDataRef.current;
