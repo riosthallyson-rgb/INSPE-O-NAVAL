@@ -1,5 +1,6 @@
 name: Android smoke build
 
+# Alterações neste workflow devem ser deliberadas: cada push deste arquivo dispara build nativo.
 on:
   workflow_dispatch:
   push:
