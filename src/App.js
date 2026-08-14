@@ -504,6 +504,8 @@ export default function App() {
     try {
       const simulated = await askGroundedAssistant({ question, inspection: currentInspection, contextOverrides: { operationalState } });
       setResult({ ...simulated, isSimulation: true });
+    } catch (error) {
+      Alert.alert('Bússola', error?.message || 'Não foi possível simular o cenário localmente.');
     } finally {
       setIsAskingCompass(false);
     }
