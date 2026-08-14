@@ -12,7 +12,7 @@ on:
 jobs:
   build-and-launch:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -27,16 +27,16 @@ jobs:
         run: npm ci
       - name: Generate Android native project
         run: npx expo prebuild --platform android --clean --no-install --non-interactive
-      - name: Build installable debug APK
+      - name: Build standalone release APK for smoke testing
         working-directory: android
-        run: ./gradlew assembleDebug --no-daemon
-      - name: Upload APK
+        run: ./gradlew assembleRelease --no-daemon
+      - name: Upload standalone APK
         uses: actions/upload-artifact@v4
         with:
-          name: inspetor-naval-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: inspetor-naval-release-smoke-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
           retention-days: 7
-      - name: Launch APK in Android emulator
+      - name: Launch standalone APK in Android emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -44,10 +44,10 @@ jobs:
           profile: pixel_6
           disable-animations: true
           script: |
-            adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+            adb install -r android/app/build/outputs/apk/release/app-release.apk
             adb logcat -c
             adb shell monkey -p com.bizu.inspetornaval -c android.intent.category.LAUNCHER 1
-            sleep 8
+            sleep 10
             echo "Process: $(adb shell pidof com.bizu.inspetornaval)"
             test -n "$(adb shell pidof com.bizu.inspetornaval)"
             if adb logcat -d | grep -E "FATAL EXCEPTION: main|AndroidRuntime.*FATAL"; then
