@@ -23,16 +23,17 @@ O campo `verificationStatus` do catálogo geral de publicações continua indepe
 - embarcação não inscrita ou registrada, sem TIE/PRPM;
 - embarcação inscrita que não porta TIE/PRPM;
 - conceitos auditados de retirada de tráfego e impedimento de saída;
-- dotação e localização de extintores conforme referência ao Anexo 4-F da NORMAM-201;
+- dotação e localização de extintores conforme referência ao Anexo 4-F da NORMAM-201, **somente quando o contexto de navegação em mar aberto está estabelecido**;
 - apresentação de listas atualizadas de tripulantes, passageiros e PNT na navegação interior, nos cenários auditados da NORMAM-204;
 - requisitos operacionais auditados para transbordo de pessoal em águas não abrigadas;
 - limite de lotação em embarcação de esporte/recreio;
-- conferência de coletes e boias na lista de vistoria inicial da NORMAM-211.
+- conferência de coletes e boias na lista de vistoria inicial da NORMAM-211, **somente quando o contexto de esporte/recreio está estabelecido**.
 
 ## Validação
 
 - cenários automatizados classificam resposta fundamentada, esclarecimento obrigatório ou recusa segura;
 - perguntas sem regra estruturada retornam zero citações;
+- perguntas de equipamentos que não estabelecem o contexto auditado (por exemplo, coletes sem esporte/recreio ou extintores sem mar aberto) retornam insuficiência em vez de reutilizar uma norma de outro cenário;
 - chunks sem fonte, versão, seção ou página são descartados;
 - cada fonte auditada possui hash SHA-256 de 64 caracteres e data de conferência;
 - simulações de estado operacional não alteram a inspeção real;
