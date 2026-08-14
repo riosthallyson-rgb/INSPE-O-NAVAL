@@ -51,7 +51,7 @@ const mergeRecordsById = (currentRecords, importedRecords, idSelector) => {
     const key = idSelector(record);
     if (!key) continue;
     const previous = merged.get(key);
-    if (!previous || recordFreshness(record) >= recordFreshness(previous)) merged.set(key, record);
+    if (!previous || recordFreshness(record) > recordFreshness(previous)) merged.set(key, record);
   }
   return [...merged.values()];
 };
