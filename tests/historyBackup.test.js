@@ -29,6 +29,18 @@ describe('backup local do histórico', () => {
     expect(result.importedHistoryCount).toBe(1);
   });
 
+  test('preserva o registro local quando a versão importada não é comprovadamente mais nova', () => {
+    const currentHistory = [{ id: 'i-1', vessel: { name: 'Registro local' } }];
+    const backup = createHistoryBackup({
+      history: [{ id: 'i-1', vessel: { name: 'Importado sem data' } }],
+      vessels: [{ id: 'v-1', name: 'Importado' }],
+      createdAt: '2026-08-14T12:00:00.000Z',
+    });
+    const result = mergeHistoryBackup({ currentHistory, currentVessels: [{ id: 'v-1', name: 'Local' }], backup });
+    expect(result.history[0].vessel.name).toBe('Registro local');
+    expect(result.vessels[0].name).toBe('Local');
+  });
+
   test('informa backup ausente, atual ou antigo', () => {
     const now = new Date('2026-08-14T12:00:00.000Z');
     expect(getBackupHealth({ historyCount: 3, now }).status).toBe('never');
