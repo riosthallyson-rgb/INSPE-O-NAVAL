@@ -10,7 +10,7 @@ on:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -38,6 +38,9 @@ jobs:
           code=${PIPESTATUS[0]}
           exit $code
 
+      - name: Resolve Android application bundle
+        run: npx expo export --platform android --output-dir dist-ci 2>&1 | tee expo-export-android.txt
+
       - name: Production audit
         if: always()
         continue-on-error: true
@@ -57,6 +60,7 @@ jobs:
             expo-install-check.txt
             expo-doctor.txt
             test-output.txt
+            expo-export-android.txt
             npm-audit-production.txt
             npm-audit-full.txt
           if-no-files-found: ignore
