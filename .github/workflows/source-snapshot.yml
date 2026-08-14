@@ -15,10 +15,13 @@ jobs:
       - uses: actions/checkout@v4
       - name: Prepare selected sources
         run: |
-          mkdir -p snapshot/src/features/inspections snapshot/src/features/history snapshot/src/theme snapshot/app
+          mkdir -p snapshot/src/features/inspections snapshot/src/features/history snapshot/src/theme snapshot/src/legal/compass snapshot/src/components snapshot/app
           cp src/App.js snapshot/src/App.js
           cp src/features/inspections/AssistedInspectionScreen.js snapshot/src/features/inspections/AssistedInspectionScreen.js
           cp src/features/history/InspectionHistoryScreen.js snapshot/src/features/history/InspectionHistoryScreen.js
+          cp src/legal/compass/normativeCompassEngine.js snapshot/src/legal/compass/normativeCompassEngine.js
+          cp src/components/AppHeader.js snapshot/src/components/AppHeader.js
+          cp src/components/CompactAppBar.js snapshot/src/components/CompactAppBar.js
           cp src/theme/tokens.js snapshot/src/theme/tokens.js
           cp src/theme/styles.js snapshot/src/theme/styles.js
           cp app.json eas.json package.json README.md snapshot/
