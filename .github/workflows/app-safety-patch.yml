@@ -1,0 +1,49 @@
+name: Apply field safety coordination patch
+
+on:
+  push:
+    branches:
+      - 'agent/finaliza-inspetor-naval'
+    paths:
+      - '.github/workflows/app-safety-patch.yml'
+      - 'scripts/patch-field-safety.mjs'
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/finaliza-inspetor-naval
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Apply exact source transformations
+        run: node scripts/patch-field-safety.mjs
+      - name: Validate resulting diff
+        run: git diff --check
+      - name: Validate Expo project
+        run: |
+          npx expo install --check
+          npx expo-doctor
+      - name: Run tests
+        run: npm test
+      - name: Commit validated source patch
+        shell: bash
+        run: |
+          if git diff --quiet -- src/App.js src/features/inspections/usePersistedInspectionData.js src/features/inspections/AssistedInspectionScreen.js; then
+            echo "No source changes produced."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/App.js src/features/inspections/usePersistedInspectionData.js src/features/inspections/AssistedInspectionScreen.js
+          git commit -m "Corrige coordenação de persistência em campo"
+          git push origin HEAD:agent/finaliza-inspetor-naval
