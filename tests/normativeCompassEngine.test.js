@@ -15,6 +15,7 @@ describe('Bússola Normativa 2.0', () => {
     expect(result.citations).toEqual([]);
     expect(result.locationAssessment.jurisdictionId).toBe('CPPI');
   });
+
   test('distingue Inspeção Naval de Vistoria com texto oficial citado', async () => {
     const result = await answerNormativeCompass({ question: 'Qual a diferença entre Inspeção Naval e Vistoria?' });
     expect(result.insufficientEvidence).toBe(false);
@@ -34,6 +35,7 @@ describe('Bússola Normativa 2.0', () => {
     expect(result.debug.ruleIds).toContain(ruleId);
     expect(result.citations[0].officialText).toBeTruthy();
   });
+
   test('distingue não portar TIE de não possuir TIE', async () => {
     const notCarried = await answerNormativeCompass({ question: 'A embarcação não porta TIE.' });
     const unregistered = await answerNormativeCompass({ question: 'A embarcação navegando não possui TIE.' });
@@ -87,16 +89,30 @@ describe('Bússola Normativa 2.0', () => {
     expect(withdrawal.citations[0].section).toBe('3.7.3');
   });
 
-  test('responde quantidade de coletes somente com o trecho auditado da NORMAM-211', async () => {
+  test('recusa quantidade de coletes quando o contexto de esporte e recreio não foi estabelecido', async () => {
     const result = await answerNormativeCompass({ question: 'Quantos coletes devem existir para a lotação da embarcação?' });
+    expect(result.answer).toBe(INSUFFICIENT_COMPASS_ANSWER);
+    expect(result.citations).toEqual([]);
+  });
+
+  test('responde quantidade de coletes somente no contexto auditado de esporte e recreio', async () => {
+    const inspection = { id: 'recreio-coletes', context: {}, vessel: { vesselUse: 'Esporte e recreio' } };
+    const result = await answerNormativeCompass({ question: 'Quantos coletes devem existir para a lotação da embarcação?', inspection });
     expect(result.insufficientEvidence).toBe(false);
     expect(result.debug.ruleIds).toEqual(['N211_LIFEJACKETS']);
     expect(result.citations[0]).toMatchObject({ sourceId: 'normam-211', section: 'Anexo 3-B, item 1(e) — Coletes', page: 206 });
     expect(result.answer).toContain('quantidade de coletes');
   });
 
-  test('não calcula número de extintores sem contexto da tabela auditada', async () => {
+  test('recusa extintores quando a área de navegação não foi estabelecida como mar aberto', async () => {
     const result = await answerNormativeCompass({ question: 'Qual a dotação de extintores da embarcação?' });
+    expect(result.answer).toBe(INSUFFICIENT_COMPASS_ANSWER);
+    expect(result.citations).toEqual([]);
+  });
+
+  test('não calcula número de extintores fora da tabela auditada mesmo com contexto de mar aberto', async () => {
+    const inspection = { id: 'mar-aberto-1', context: {}, vessel: { navigationArea: 'Mar aberto' } };
+    const result = await answerNormativeCompass({ question: 'Qual a dotação de extintores da embarcação?', inspection });
     expect(result.insufficientEvidence).toBe(false);
     expect(result.debug.ruleIds).toEqual(expect.arrayContaining(['N201_EXTINGUISHERS_LOCATION', 'N201_EXTINGUISHERS_TABLE']));
     expect(result.answer).toContain('quantidade exata depende');
