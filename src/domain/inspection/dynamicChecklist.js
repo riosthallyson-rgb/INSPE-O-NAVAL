@@ -20,14 +20,14 @@ const moduleCatalog = Object.freeze({
     { text: 'Conferir categoria, número, validade e correspondência entre condutor e documento apresentado', category: 'Documentação e habilitação' },
   ],
   salvatagem: [
-    { text: 'Contar os coletes salva-vidas disponíveis e comparar com o total de pessoas a bordo', category: 'Segurança e emergência', photoRecommended: true },
-    { text: 'Verificar estado aparente, tamanho e acessibilidade dos coletes salva-vidas', category: 'Segurança e emergência' },
-    { text: 'Verificar presença, estado e acesso às boias circulares exigidas para a embarcação', category: 'Segurança e emergência', photoRecommended: true },
+    { text: 'Contar os coletes salva-vidas disponíveis e comparar com o total de pessoas a bordo', category: 'Segurança e emergência', photoRecommended: true, ruleId: 'N211_LIFEJACKETS', vesselUse: 'Esporte e recreio' },
+    { text: 'Verificar estado aparente, tamanho e acessibilidade dos coletes salva-vidas', category: 'Segurança e emergência', ruleId: 'N211_LIFEJACKETS', vesselUse: 'Esporte e recreio' },
+    { text: 'Verificar presença, estado e acesso às boias circulares exigidas para a embarcação', category: 'Segurança e emergência', photoRecommended: true, ruleId: 'N211_LIFEBUOYS', vesselUse: 'Esporte e recreio' },
     { text: 'Verificar presença e validade aparente dos sinalizadores pirotécnicos quando aplicáveis', category: 'Segurança e emergência', photoRecommended: true },
     { text: 'Verificar embarcação ou meio de sobrevivência quando exigido para o tipo e área de navegação', category: 'Segurança e emergência' },
   ],
   incendio: [
-    { text: 'Contar os extintores disponíveis e registrar classe, capacidade e localização', category: 'Segurança e emergência', photoRecommended: true },
+    { text: 'Contar os extintores disponíveis e registrar classe, capacidade e localização', category: 'Segurança e emergência', photoRecommended: true, ruleId: 'N201_EXTINGUISHERS_LOCATION', navigationArea: 'Mar aberto' },
     { text: 'Verificar validade, lacre, manômetro e estado aparente dos extintores', category: 'Segurança e emergência', photoRecommended: true },
     { text: 'Verificar acesso desobstruído aos equipamentos de combate a incêndio', category: 'Segurança e emergência' },
     { text: 'Registrar condição aparente de instalações de combustível, cozinha e fontes de ignição', category: 'Segurança e emergência', photoRecommended: true },
@@ -69,7 +69,7 @@ const moduleCatalog = Object.freeze({
   ],
   esporte_recreio: [
     { text: 'Registrar finalidade recreativa observada e condições de embarque das pessoas a bordo', category: 'Esporte e recreio' },
-    { text: 'Verificar disponibilidade imediata dos equipamentos de segurança utilizados na atividade recreativa', category: 'Esporte e recreio' },
+    { text: 'Conferir a lotação observada com a lotação constante do TIE ou PRPM', category: 'Esporte e recreio', ruleId: 'N211_CAPACITY_LIMIT', vesselUse: 'Esporte e recreio', photoRecommended: true },
   ],
   moto_aquatica: [
     { text: 'Verificar estado aparente do colete e do dispositivo de segurança associado ao condutor', category: 'Moto aquática', photoRecommended: true },
@@ -87,8 +87,16 @@ const getVerifiedRule = (ruleId) => {
   return chunk;
 };
 
-const createChecklistItem = ({ moduleId, definition, index, applicableNorms }) => {
-  const chunk = getVerifiedRule(definition.ruleId);
+const definitionMatchesContext = (definition, applicability) => {
+  const context = applicability?.context || {};
+  if (definition.vesselUse && context.vesselUse !== definition.vesselUse) return false;
+  if (definition.navigationArea && context.navigationArea !== definition.navigationArea) return false;
+  return true;
+};
+
+const createChecklistItem = ({ moduleId, definition, index, applicability }) => {
+  const contextMatches = definitionMatchesContext(definition, applicability);
+  const chunk = contextMatches ? getVerifiedRule(definition.ruleId) : null;
   const verified = Boolean(chunk);
   return {
     id: `${moduleId}-${index + 1}`,
@@ -104,7 +112,7 @@ const createChecklistItem = ({ moduleId, definition, index, applicableNorms }) =
       ? `${chunk.source.title} · ${chunk.section} · página PDF ${chunk.pageStart}`
       : PENDING_REFERENCE,
     referenceStatus: verified ? 'verified' : 'pending',
-    sourceIds: verified ? [chunk.sourceId] : applicableNorms || [],
+    sourceIds: verified ? [chunk.sourceId] : applicability?.applicableNorms || [],
     legalBasis: verified
       ? {
           sourceId: chunk.sourceId,
@@ -124,7 +132,7 @@ export const buildDynamicChecklist = (applicability = {}) =>
       moduleId,
       definition,
       index,
-      applicableNorms: applicability?.applicableNorms || [],
+      applicability,
     }))
   );
 
