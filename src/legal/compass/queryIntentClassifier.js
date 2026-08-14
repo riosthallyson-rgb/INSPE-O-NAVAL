@@ -8,6 +8,7 @@ export const classifyCompassIntent = (question) => {
   if (/apreens|retirada de trafego|impedimento de saida/.test(value)) return 'ADMINISTRATIVE_MEASURE';
   if (/cha|cir|habilita/.test(value)) return 'DRIVER_LICENSE';
   if (/tie|prpm|documento/.test(value)) return 'DOCUMENT';
-  if (/colete|extintor|luzes/.test(value)) return 'EQUIPMENT';
+  if (/colete|boia|extintor|luzes|salvatagem/.test(value)) return 'EQUIPMENT';
+  if (/lotacao|capacidade|lista.*passageir|passageir.*lista|transbordo/.test(value)) return 'PASSENGER_OPERATION';
   return 'GENERAL_SEARCH';
 };
