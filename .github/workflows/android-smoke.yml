@@ -1,6 +1,6 @@
 name: Android smoke build
 
-# Validação nativa final do HEAD da branch; mudanças neste workflow disparam build completo.
+# Validação nativa definitiva do código final desta entrega; mudanças neste workflow disparam build completo.
 on:
   workflow_dispatch:
   push:
