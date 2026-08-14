@@ -14,11 +14,19 @@ describe('motores da inspeção assistida', () => {
     expect(result.checklistModules).toEqual(expect.arrayContaining(['regional', 'esporte_recreio']));
   });
 
-  test('gera itens operacionais granulares sem apresentar fundamento pendente como oficial', () => {
+  test('gera itens operacionais granulares sem apresentar fundamento pendente como oficial fora do contexto auditado', () => {
     const items = buildDynamicChecklist({ checklistModules: ['salvatagem'], applicableNorms: ['normam-211'] });
     expect(items.length).toBeGreaterThanOrEqual(4);
     expect(items.every((item) => item.referenceStatus === 'pending')).toBe(true);
     expect(items.every((item) => item.reference.includes('não localizada'))).toBe(true);
+  });
+
+  test('habilita referências de coletes e boias somente para o contexto auditado de esporte e recreio', () => {
+    const applicability = evaluateInspectionApplicability({ vesselUse: 'Esporte e recreio', navigationArea: 'Interior', operationalState: 'Navegando' });
+    const items = buildDynamicChecklist(applicability);
+    const verifiedSalvatagem = items.filter((item) => item.moduleId === 'salvatagem' && item.referenceStatus === 'verified');
+    expect(verifiedSalvatagem.length).toBeGreaterThanOrEqual(3);
+    expect(verifiedSalvatagem.every((item) => item.legalBasis?.sourceId === 'normam-211' && item.legalBasis?.page === 206)).toBe(true);
   });
 
   test('usa somente regra já auditada para marcar referência como verificada', () => {
@@ -26,6 +34,12 @@ describe('motores da inspeção assistida', () => {
     const verified = items.filter((item) => item.referenceStatus === 'verified');
     expect(verified.length).toBeGreaterThan(0);
     expect(verified.every((item) => item.legalBasis?.sourceId && item.legalBasis?.version && item.legalBasis?.section && Number.isFinite(item.legalBasis?.page))).toBe(true);
+  });
+
+  test('vincula extintor à NORMAM-201 somente quando a área informada é mar aberto', () => {
+    const applicability = evaluateInspectionApplicability({ vesselUse: 'Pesca', navigationArea: 'Mar aberto', operationalState: 'Navegando' });
+    const item = buildDynamicChecklist(applicability).find((entry) => entry.moduleId === 'incendio' && entry.text.includes('Contar os extintores'));
+    expect(item).toMatchObject({ referenceStatus: 'verified', legalBasis: { sourceId: 'normam-201', page: 227 } });
   });
 
   test('permite configurar evidência fotográfica obrigatória sem alterar outros itens', () => {
