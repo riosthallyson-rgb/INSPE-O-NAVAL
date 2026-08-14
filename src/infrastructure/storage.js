@@ -18,35 +18,81 @@ const readJsonFile = async (uri) => {
   return content ? JSON.parse(content) : undefined;
 };
 
-export const loadStoredData = async (key, fallback) => {
-  try {
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      const value = window.localStorage.getItem(key);
-      return value ? JSON.parse(value) : fallback;
-    }
+const loadWebDataDetailed = (key, fallback) => {
+  if (typeof window === 'undefined') return { data: fallback, status: 'fallback', error: null };
+  const primaryValue = window.localStorage.getItem(key);
+  const backupValue = window.localStorage.getItem(`${key}.backup`);
 
-    const uri = `${FileSystem.documentDirectory}${key}.json`;
+  if (primaryValue) {
     try {
-      const primary = await readJsonFile(uri);
-      if (primary !== undefined) return primary;
-
-      const backup = await readJsonFile(`${uri}.backup`);
-      return backup ?? fallback;
+      return { data: JSON.parse(primaryValue), status: 'primary', error: null };
     } catch (primaryError) {
-      const backup = await readJsonFile(`${uri}.backup`);
-      if (backup !== undefined) return backup;
-      throw primaryError;
+      if (backupValue) {
+        try {
+          return { data: JSON.parse(backupValue), status: 'backup', error: primaryError };
+        } catch (backupError) {
+          return { data: fallback, status: 'fallback', error: backupError };
+        }
+      }
+      return { data: fallback, status: 'fallback', error: primaryError };
     }
+  }
+
+  if (backupValue) {
+    try {
+      return { data: JSON.parse(backupValue), status: 'backup', error: null };
+    } catch (error) {
+      return { data: fallback, status: 'fallback', error };
+    }
+  }
+
+  return { data: fallback, status: 'fallback', error: null };
+};
+
+const loadNativeDataDetailed = async (key, fallback) => {
+  const uri = `${FileSystem.documentDirectory}${key}.json`;
+  const backupUri = `${uri}.backup`;
+  let primaryError = null;
+
+  try {
+    const primary = await readJsonFile(uri);
+    if (primary !== undefined) return { data: primary, status: 'primary', error: null };
+  } catch (error) {
+    primaryError = error;
+  }
+
+  try {
+    const backup = await readJsonFile(backupUri);
+    if (backup !== undefined) return { data: backup, status: 'backup', error: primaryError };
+  } catch (backupError) {
+    return { data: fallback, status: 'fallback', error: backupError };
+  }
+
+  return { data: fallback, status: 'fallback', error: primaryError };
+};
+
+export const loadStoredDataDetailed = async (key, fallback) => {
+  try {
+    const result = Platform.OS === 'web'
+      ? loadWebDataDetailed(key, fallback)
+      : await loadNativeDataDetailed(key, fallback);
+    if (result.error) console.warn(`Falha parcial ao carregar ${key}`, result.error);
+    return result;
   } catch (error) {
     console.warn(`Falha ao carregar ${key}`, error);
-    return fallback;
+    return { data: fallback, status: 'fallback', error };
   }
 };
 
+export const loadStoredData = async (key, fallback) => (await loadStoredDataDetailed(key, fallback)).data;
+
 const writeStoredData = async (key, data) => {
   const serialized = JSON.stringify(data);
+  JSON.parse(serialized);
 
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    const current = window.localStorage.getItem(key);
+    if (current) window.localStorage.setItem(`${key}.backup`, current);
     window.localStorage.setItem(key, serialized);
     return;
   }
