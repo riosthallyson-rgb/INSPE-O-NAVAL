@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, Pressable, Text, View } from 'react-native';
+import { motion } from '../theme/tokens';
 
 const AnimatedTab = ({ tab, selected, darkMode, onSelect, styles }) => {
   const pressScale = useRef(new Animated.Value(1)).current;
@@ -8,7 +9,7 @@ const AnimatedTab = ({ tab, selected, darkMode, onSelect, styles }) => {
   useEffect(() => {
     Animated.timing(selection, {
       toValue: selected ? 1 : 0,
-      duration: 180,
+      duration: motion.quick,
       useNativeDriver: true,
     }).start();
   }, [selected, selection]);
@@ -17,7 +18,7 @@ const AnimatedTab = ({ tab, selected, darkMode, onSelect, styles }) => {
     Animated.spring(pressScale, {
       toValue: value,
       speed: 28,
-      bounciness: 4,
+      bounciness: 3,
       useNativeDriver: true,
     }).start();
   };
@@ -26,11 +27,13 @@ const AnimatedTab = ({ tab, selected, darkMode, onSelect, styles }) => {
     <Pressable
       style={styles.bottomTabTouchTarget}
       onPress={() => onSelect(tab.key)}
-      onPressIn={() => animatePress(0.94)}
+      onPressIn={() => animatePress(0.96)}
       onPressOut={() => animatePress(1)}
       accessibilityRole="tab"
       accessibilityLabel={`Abrir ${tab.label}`}
+      accessibilityHint={selected ? 'Aba atual' : `Muda para a área ${tab.label}`}
       accessibilityState={{ selected }}
+      hitSlop={2}
     >
       <Animated.View
         style={[
@@ -40,12 +43,13 @@ const AnimatedTab = ({ tab, selected, darkMode, onSelect, styles }) => {
           selected && darkMode && styles.bottomTabContentActiveDark,
           {
             transform: [
-              { scale: Animated.multiply(pressScale, selection.interpolate({ inputRange: [0, 1], outputRange: [1, 1.02] })) },
+              { scale: Animated.multiply(pressScale, selection.interpolate({ inputRange: [0, 1], outputRange: [1, 1.015] })) },
             ],
           },
         ]}
       >
         <Animated.View
+          pointerEvents="none"
           style={[
             styles.bottomTabIndicator,
             {
@@ -56,12 +60,13 @@ const AnimatedTab = ({ tab, selected, darkMode, onSelect, styles }) => {
         />
         <Text
           numberOfLines={1}
+          maxFontSizeMultiplier={1.35}
           style={[
             styles.bottomTabLabel,
             darkMode && styles.bottomTabLabelDark,
-          selected && styles.bottomTabLabelActive,
-          selected && darkMode && styles.bottomTabLabelActiveDark,
-        ]}
+            selected && styles.bottomTabLabelActive,
+            selected && darkMode && styles.bottomTabLabelActiveDark,
+          ]}
         >
           {tab.label}
         </Text>
