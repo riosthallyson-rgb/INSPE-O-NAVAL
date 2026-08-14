@@ -434,19 +434,22 @@ export default function App() {
     }
   };
 
-  const advanceAssistedInspection = () => {
+  const advanceAssistedInspection = async () => {
     const validationError = validateInspectionStep(currentInspection);
     if (validationError) { Alert.alert('Etapa incompleta', validationError); return; }
     if (currentInspection.currentStep === 2) {
       const vessel = currentInspection.vessel;
-      saveVesselProfile(prepareVesselProfile({
-        ...vessel,
-        armador: vessel.armador || vessel.owner,
-        activity: vessel.vesselUse,
-        motors: [vessel.engineCount, vessel.enginePower, vessel.propulsion].filter(Boolean).join(' · '),
-      })).catch((error) => {
+      try {
+        await saveVesselProfile(prepareVesselProfile({
+          ...vessel,
+          armador: vessel.armador || vessel.owner,
+          activity: vessel.vesselUse,
+          motors: [vessel.engineCount, vessel.enginePower, vessel.propulsion].filter(Boolean).join(' · '),
+        }));
+      } catch (error) {
         Alert.alert('Cadastro da embarcação', error.message || 'Não foi possível salvar o perfil reutilizável da embarcação. A inspeção atual continua disponível.');
-      });
+        return;
+      }
     }
     setCurrentInspection((current) => {
       let next = { ...current };
