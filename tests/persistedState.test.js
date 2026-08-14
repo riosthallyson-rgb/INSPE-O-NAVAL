@@ -13,14 +13,16 @@ describe('estado persistido da aplicação', () => {
       compassHistory: [],
       history: [],
       currentInspection: null,
+      backupMeta: { lastExportedAt: '', lastImportedAt: '' },
     });
   });
 
-  test('migra perfil, histórico e inspeção atual para o esquema vigente', () => {
+  test('migra perfil, histórico, inspeção atual e metadados para o esquema vigente', () => {
     const migrated = migratePersistedState({
       profile: { name: 'Ana', badge: '1234' },
       history: [{ vessel: { name: 'Navio Escola' }, inspector: { badge: '1234' } }],
       currentInspection: { vessel: null, inspector: { name: 'Ana' } },
+      backupMeta: { lastExportedAt: '2026-08-10T12:00:00.000Z', lastImportedAt: 'inválida' },
     });
 
     expect(migrated.schemaVersion).toBe(CURRENT_STORAGE_SCHEMA);
@@ -29,6 +31,7 @@ describe('estado persistido da aplicação', () => {
     expect(migrated.history[0].vessel.tie).toBe('');
     expect(migrated.history[0].inspector.nip).toBe('1234');
     expect(migrated.currentInspection.checkItems).toEqual([]);
+    expect(migrated.backupMeta).toEqual({ lastExportedAt: '2026-08-10T12:00:00.000Z', lastImportedAt: '' });
   });
 
   test('rejeita um documento persistido que não seja objeto', () => {

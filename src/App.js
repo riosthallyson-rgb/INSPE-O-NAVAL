@@ -44,6 +44,8 @@ import { captureCurrentInspectionLocation } from './infrastructure/geolocation/c
 import { confirmInspectionLocation, createInspectionLocation } from './domain/geospatial/inspectionLocation';
 import { resolveJurisdiction } from './domain/geospatial/jurisdictionResolver';
 import { EMPTY_REGIONAL_RULE_SETS, findRegionalRuleSet } from './domain/regional/regionalRulesManager';
+import { searchOfflineData } from './domain/globalSearch';
+import { GlobalSearchPanel } from './features/search/GlobalSearchPanel';
 
 const inspectorInitial = emptyInspectorProfile;
 
@@ -64,6 +66,7 @@ export default function App() {
     setCurrentInspection,
     archiveInspection,
     saveVesselProfile,
+    startInspection,
     storageStatus,
     lastSavedAt,
     retrySave,
@@ -72,6 +75,11 @@ export default function App() {
     removeCompassHistory,
     storageError,
     clearStorageError,
+    storageNotice,
+    clearStorageNotice,
+    backupHealth,
+    exportHistoryBackup,
+    importHistoryBackup,
   } = usePersistedInspectionData();
   const [profileForm, setProfileForm] = useState(inspectorInitial);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
@@ -87,6 +95,8 @@ export default function App() {
   const [documentFilter, setDocumentFilter] = useState('');
   const [historyFilter, setHistoryFilter] = useState('');
   const [historyResultFilter, setHistoryResultFilter] = useState('Todos');
+  const [globalSearchQuery, setGlobalSearchQuery] = useState('');
+  const [isFinishingInspection, setIsFinishingInspection] = useState(false);
 
   useEffect(() => {
     setProfileForm(inspectorProfile);
@@ -122,6 +132,7 @@ export default function App() {
     return matchesText && matchesResult;
   });
   const historySummary = getHistorySummary(history);
+  const globalSearchResults = searchOfflineData({ query: globalSearchQuery, history, publications, vessels });
 
   const handleSaveProfile = async () => {
     if (!profileForm.name.trim()) {
@@ -135,8 +146,8 @@ export default function App() {
       setIsEditingProfile(false);
       setProfileFeedback('Perfil salvo neste dispositivo.');
       setActiveTab('Início');
-    } catch {
-      return;
+    } catch (error) {
+      Alert.alert('Perfil', error?.message || 'Não foi possível salvar o perfil neste dispositivo.');
     } finally {
       setIsSavingProfile(false);
     }
@@ -216,17 +227,38 @@ export default function App() {
 
   const handleDocumentQr = async (scanResult) => {
     const evidence = currentInspection?.vessel?.documentEvidence;
-    if (!scanResult?.data && (!evidence?.originalFile || evidence.originalFile.toLowerCase().endsWith('.pdf'))) {
+    if (!scanResult?.data && evidence?.originalFile?.toLowerCase().endsWith('.pdf')) {
+      Alert.alert('Ler QR Code', 'A leitura direta de QR dentro de PDF ainda não é suportada no dispositivo. Use a câmera ao vivo ou importe uma imagem da página que contém o QR.');
+      return;
+    }
+    if (!scanResult?.data && !evidence?.originalFile) {
       Alert.alert('Ler QR Code', 'Capture ou importe uma imagem do documento antes de procurar o QR Code.');
       return;
     }
     try {
       const baseEvidence = evidence || { id: `qr-${Date.now()}`, type: 'UNKNOWN', extractedFields: [], originalFile: null };
-      const documentEvidence = scanResult?.data ? applyQrDetection(baseEvidence, { detected: true, readable: true, data: scanResult.data }) : await scanQrFromDocumentImage(baseEvidence);
-      setCurrentInspection((current) => documentEvidence.qrState === 'QR_DATA_EXTRACTED' ? appendAuditEvent({ ...current, vessel: { ...current.vessel, documentEvidence } }, 'QR_DETECTED', { documentId: documentEvidence.id, readable: true }) : { ...current, vessel: { ...current.vessel, documentEvidence } });
-      Alert.alert('QR Code', documentEvidence.qrState === 'QR_DATA_EXTRACTED' ? 'QR Code lido. A autenticidade permanece não verificada.' : 'Nenhum QR Code legível foi localizado nesta imagem.');
-    } catch {
-      Alert.alert('QR Code', 'Não foi possível ler o QR Code. A autenticidade permanece não verificada.');
+      const documentEvidence = scanResult?.data
+        ? applyQrDetection(baseEvidence, { detected: true, readable: true, data: scanResult.data })
+        : await scanQrFromDocumentImage(baseEvidence);
+      setCurrentInspection((current) => {
+        const updated = { ...current, vessel: { ...current.vessel, documentEvidence } };
+        if (documentEvidence.qrState === 'QR_DATA_EXTRACTED') {
+          return appendAuditEvent(updated, 'QR_DATA_EXTRACTED', { documentId: documentEvidence.id, readable: true, format: documentEvidence.qrPayloadFormat, fieldCount: documentEvidence.extractedFields?.length || 0 });
+        }
+        if (documentEvidence.qrState === 'QR_READABLE') {
+          return appendAuditEvent(updated, 'QR_READ_UNRECOGNIZED', { documentId: documentEvidence.id, readable: true });
+        }
+        return updated;
+      });
+      if (documentEvidence.qrState === 'QR_DATA_EXTRACTED') {
+        Alert.alert('QR Code lido', 'Os dados estruturados foram extraídos para conferência. Nenhum campo foi confirmado automaticamente e a autenticidade permanece não verificada.');
+      } else if (documentEvidence.qrState === 'QR_READABLE') {
+        Alert.alert('QR Code lido', 'O QR foi lido, mas o formato não é reconhecido para preenchimento automático. A autenticidade permanece não verificada.');
+      } else {
+        Alert.alert('QR Code', 'Nenhum QR Code legível foi localizado nesta imagem.');
+      }
+    } catch (error) {
+      Alert.alert('QR Code', error.message || 'Não foi possível ler o QR Code. A autenticidade permanece não verificada.');
     }
   };
 
@@ -253,7 +285,7 @@ export default function App() {
     setCurrentInspection((current) => {
       const linkedAt = new Date().toISOString();
       const vessel = { ...current.vessel, ...patch, documentEvidence: { ...documentEvidence, linkedToInspectionAt: linkedAt } };
-      const applicability = evaluateInspectionApplicability({ vesselType: vessel.type, vesselUse: vessel.vesselUse, navigationArea: vessel.navigationArea, operationalState: current.context.vesselOperationalState, length: vessel.lengthMeters, grossTonnage: vessel.grossTonnage, propulsion: vessel.propulsion, passengerCapacity: vessel.passengerCapacity, peopleOnBoard: current.occupancy.totalPersons, jurisdiction: current.inspector.jurisdiction });
+      const applicability = evaluateInspectionApplicability({ vesselType: vessel.type, vesselUse: vessel.vesselUse, navigationArea: vessel.navigationArea, operationalState: current.context.vesselOperationalState, length: vessel.lengthMeters, grossTonnage: vessel.grossTonnage, propulsion: vessel.propulsion, passengerCapacity: vessel.passengerCapacity, peopleOnBoard: current.occupancy.totalPersons, jurisdiction: current.context.jurisdictionConfirmedByUser ? current.context.jurisdictionId : '', jurisdictionConfirmed: current.context.jurisdictionConfirmedByUser });
       let next = { ...current, vessel, applicability };
       if (current.checkItems.length) next = { ...next, checklistRecalculationPending: true };
       next = appendAuditEvent(next, 'FIELDS_CONFIRMED', { fields: Object.keys(patch), count: Object.keys(patch).length }, linkedAt);
@@ -279,10 +311,14 @@ export default function App() {
     Alert.alert('Divergência registrada', 'A divergência foi registrada para análise. Nenhuma conclusão jurídica ou Auto foi criado.');
   };
 
-  const finalizeInspection = (finalRecord) => {
-    archiveInspection(finalRecord);
-    setActiveTab('Histórico');
-    Alert.alert('Inspeção salva', 'O relatório da inspeção foi salvo no histórico.');
+  const finalizeInspection = async (finalRecord) => {
+    try {
+      await archiveInspection(finalRecord);
+      setActiveTab('Histórico');
+      Alert.alert('Inspeção salva', 'O relatório da inspeção foi salvo no histórico.');
+    } catch (error) {
+      Alert.alert('Falha ao salvar', error.message || 'A inspeção não foi arquivada. O rascunho foi mantido para nova tentativa.');
+    }
   };
 
   const handleDiscardCurrentInspection = () => {
@@ -292,13 +328,19 @@ export default function App() {
     ]);
   };
 
-  const handleBeginAssistedInspection = () => {
+  const handleBeginAssistedInspection = async () => {
     if (!inspectorProfile.name.trim()) {
       Alert.alert('Perfil obrigatório', 'Preencha os dados do inspetor antes de iniciar uma Inspeção Naval.');
       setActiveTab('Início');
       return;
     }
-    setCurrentInspection(createInspectionDraft({ inspector: inspectorProfile, defaultVesselType: DEFAULT_VESSEL_TYPE }));
+    const draft = createInspectionDraft({ inspector: inspectorProfile, defaultVesselType: DEFAULT_VESSEL_TYPE });
+    try {
+      await startInspection(null, draft);
+      setActiveTab('Inspeção');
+    } catch (error) {
+      Alert.alert('Nova inspeção', error?.message || 'Não foi possível criar e salvar o rascunho neste dispositivo.');
+    }
   };
 
   const updateInspectionSection = (section, patch) => {
@@ -338,12 +380,29 @@ export default function App() {
   const updateAssistedChecklistItem = (itemId, patch) => {
     setCurrentInspection((current) => {
       const item = current.checkItems.find((entry) => entry.id === itemId);
-      const nextItems = current.checkItems.map((entry) => entry.id === itemId ? { ...entry, ...patch } : entry);
+      if (!item) return current;
+      const nextItem = { ...item, ...patch };
+      const nextItems = current.checkItems.map((entry) => entry.id === itemId ? nextItem : entry);
       let next = { ...current, checkItems: nextItems, updatedAt: new Date().toISOString() };
+      const existingFinding = current.findings.find((finding) => finding.itemId === itemId);
       if (patch.status && patch.status !== item.status) next = appendAuditEvent(next, 'CHECKLIST_STATUS_CHANGED', { itemId, from: item.status, to: patch.status });
-      if (patch.status === 'nao conforme' && !current.findings.some((finding) => finding.itemId === itemId)) {
-        const finding = { id: `finding-${itemId}`, itemId, itemText: item.text, type: itemId, observedDescription: item.notes || '', status: 'OPEN', observedAt: new Date().toISOString(), regularizedAt: null, legalAnalysis: evaluateLegalFinding({ finding: { type: itemId }, rules: [] }) };
-        next = appendAuditEvent({ ...next, findings: [...current.findings, finding], nonConformities: [...current.nonConformities, { ...item, status: 'nao conforme' }] }, 'FINDING_CREATED', { findingId: finding.id, itemId });
+      if (Object.prototype.hasOwnProperty.call(patch, 'photoRequired') && patch.photoRequired !== item.photoRequired) {
+        next = appendAuditEvent(next, 'CHECKLIST_EVIDENCE_REQUIREMENT_CHANGED', { itemId, photoRequired: Boolean(patch.photoRequired) });
+      }
+      if (patch.status === 'nao conforme') {
+        if (!existingFinding) {
+          const finding = { id: `finding-${itemId}`, itemId, itemText: item.text, type: itemId, observedDescription: nextItem.notes || '', status: 'OPEN', observedAt: new Date().toISOString(), regularizedAt: null, legalAnalysis: evaluateLegalFinding({ finding: { type: itemId }, rules: [] }) };
+          next = appendAuditEvent({ ...next, findings: [...current.findings, finding], nonConformities: [...current.nonConformities.filter((entry) => entry.id !== itemId), { ...nextItem, status: 'nao conforme' }] }, 'FINDING_CREATED', { findingId: finding.id, itemId });
+        } else if (existingFinding.status === 'RETRACTED') {
+          next = appendAuditEvent({ ...next, findings: current.findings.map((finding) => finding.itemId === itemId ? { ...finding, status: 'OPEN', retractedAt: null, observedDescription: nextItem.notes || finding.observedDescription } : finding), nonConformities: [...current.nonConformities.filter((entry) => entry.id !== itemId), { ...nextItem, status: 'nao conforme' }] }, 'FINDING_REOPENED', { findingId: existingFinding.id, itemId });
+        }
+      } else if (patch.status && patch.status !== 'nao conforme' && existingFinding?.status === 'OPEN') {
+        const retractedAt = new Date().toISOString();
+        next = appendAuditEvent({
+          ...next,
+          findings: next.findings.map((finding) => finding.itemId === itemId ? { ...finding, status: 'RETRACTED', retractedAt } : finding),
+          nonConformities: next.nonConformities.filter((entry) => entry.id !== itemId),
+        }, 'FINDING_RETRACTED', { findingId: existingFinding.id, itemId, correctedStatus: patch.status }, retractedAt);
       }
       if (Object.prototype.hasOwnProperty.call(patch, 'notes')) {
         next.findings = next.findings.map((finding) => finding.itemId === itemId ? { ...finding, observedDescription: patch.notes } : finding);
@@ -383,22 +442,27 @@ export default function App() {
     }
   };
 
-  const advanceAssistedInspection = () => {
+  const advanceAssistedInspection = async () => {
     const validationError = validateInspectionStep(currentInspection);
     if (validationError) { Alert.alert('Etapa incompleta', validationError); return; }
     if (currentInspection.currentStep === 2) {
       const vessel = currentInspection.vessel;
-      saveVesselProfile(prepareVesselProfile({
-        ...vessel,
-        armador: vessel.armador || vessel.owner,
-        activity: vessel.vesselUse,
-        motors: [vessel.engineCount, vessel.enginePower, vessel.propulsion].filter(Boolean).join(' · '),
-      })).catch(() => {});
+      try {
+        await saveVesselProfile(prepareVesselProfile({
+          ...vessel,
+          armador: vessel.armador || vessel.owner,
+          activity: vessel.vesselUse,
+          motors: [vessel.engineCount, vessel.enginePower, vessel.propulsion].filter(Boolean).join(' · '),
+        }));
+      } catch (error) {
+        Alert.alert('Cadastro da embarcação', error.message || 'Não foi possível salvar o perfil reutilizável da embarcação. A inspeção atual continua disponível.');
+        return;
+      }
     }
     setCurrentInspection((current) => {
       let next = { ...current };
       if (current.currentStep === 4 && !current.documents.length) next.documents = buildDynamicDocuments(current);
-      if (current.currentStep === 5) next.applicability = evaluateInspectionApplicability({ vesselType: current.vessel.type, vesselUse: current.vessel.vesselUse, navigationArea: current.vessel.navigationArea, operationalState: current.context.vesselOperationalState, length: current.vessel.lengthMeters, grossTonnage: current.vessel.grossTonnage, propulsion: current.vessel.propulsion, passengerCapacity: current.vessel.passengerCapacity, peopleOnBoard: current.occupancy.totalPersons, jurisdiction: current.inspector.jurisdiction });
+      if (current.currentStep === 5) next.applicability = evaluateInspectionApplicability({ vesselType: current.vessel.type, vesselUse: current.vessel.vesselUse, navigationArea: current.vessel.navigationArea, operationalState: current.context.vesselOperationalState, length: current.vessel.lengthMeters, grossTonnage: current.vessel.grossTonnage, propulsion: current.vessel.propulsion, passengerCapacity: current.vessel.passengerCapacity, peopleOnBoard: current.occupancy.totalPersons, jurisdiction: current.context.jurisdictionConfirmedByUser ? current.context.jurisdictionId : '', jurisdictionConfirmed: current.context.jurisdictionConfirmedByUser });
       if (current.currentStep === 6 && !current.checkItems.length) next.checkItems = buildDynamicChecklist(current.applicability);
       next.currentStep = Math.min(10, current.currentStep + 1);
       next.stage = INSPECTION_STEPS[next.currentStep - 1];
@@ -408,10 +472,16 @@ export default function App() {
 
   const goBackAssistedInspection = () => setCurrentInspection((current) => appendAuditEvent({ ...current, currentStep: Math.max(1, current.currentStep - 1), stage: INSPECTION_STEPS[Math.max(1, current.currentStep - 1) - 1] }, 'STEP_CHANGED', { from: current.currentStep, to: Math.max(1, current.currentStep - 1) }));
 
-  const finishAssistedInspection = () => {
+  const finishAssistedInspection = async () => {
+    if (isFinishingInspection) return;
     const completedAt = new Date().toISOString();
     const completed = appendAuditEvent(completeFindingReview(currentInspection, completedAt), 'INSPECTION_COMPLETED', {}, completedAt);
-    finalizeInspection(completed);
+    setIsFinishingInspection(true);
+    try {
+      await finalizeInspection(completed);
+    } finally {
+      setIsFinishingInspection(false);
+    }
   };
 
   const handleAsk = async (questionOverride = question) => {
@@ -421,6 +491,8 @@ export default function App() {
       const nextResult = await askGroundedAssistant({ question: questionOverride, inspection: currentInspection, ignoreInspectionContext: !useCompassInspectionContext });
       setResult(nextResult);
       if (nextResult.queryId) addCompassHistory(createCompassHistoryEntry(nextResult));
+    } catch (error) {
+      Alert.alert('Bússola', error.message || 'Não foi possível concluir a consulta local.');
     } finally {
       setIsAskingCompass(false);
     }
@@ -432,6 +504,8 @@ export default function App() {
     try {
       const simulated = await askGroundedAssistant({ question, inspection: currentInspection, contextOverrides: { operationalState } });
       setResult({ ...simulated, isSimulation: true });
+    } catch (error) {
+      Alert.alert('Bússola', error?.message || 'Não foi possível simular o cenário localmente.');
     } finally {
       setIsAskingCompass(false);
     }
@@ -466,6 +540,46 @@ export default function App() {
     }
   };
 
+  const handleExportBackup = async () => {
+    try {
+      const file = await exportHistoryBackup();
+      Alert.alert('Backup exportado', file.shared ? 'A cópia local foi preparada para salvar ou compartilhar.' : `Backup gerado em ${file.uri || file.fileName}.`);
+    } catch (error) {
+      Alert.alert('Backup', error.message || 'Não foi possível exportar o histórico.');
+    }
+  };
+
+  const handleImportBackup = async () => {
+    try {
+      const imported = await importHistoryBackup();
+      if (imported.canceled) return;
+      Alert.alert('Backup importado', `${imported.importedHistoryCount} inspeção(ões) e ${imported.importedVesselCount} embarcação(ões) novas foram incorporadas sem apagar os registros atuais.`);
+    } catch (error) {
+      Alert.alert('Importar backup', error.message || 'Não foi possível importar o arquivo selecionado.');
+    }
+  };
+
+  const handleGlobalSearchResult = (item) => {
+    if (item.type === 'publication') {
+      router.push({ pathname: '/publication/[id]', params: { id: item.id, dark: isDarkMode ? '1' : '0' } });
+      return;
+    }
+    if (item.type === 'inspection') {
+      setHistoryFilter(item.record?.vessel?.name || item.record?.vessel?.tie || '');
+      setActiveTab('Histórico');
+      return;
+    }
+    if (item.type === 'vessel') {
+      if (!currentInspection) {
+        Alert.alert('Embarcação salva', 'Inicie uma nova inspeção para reutilizar este cadastro.');
+        setActiveTab('Inspeção');
+        return;
+      }
+      updateInspectionSection('vessel', item.record);
+      setActiveTab('Inspeção');
+    }
+  };
+
   const quickQuestions = [
     'Condutor sem habilitação',
     'CHA/CIR vencida',
@@ -487,13 +601,15 @@ export default function App() {
     <AppHeader
       darkMode={isDarkMode}
       storageError={storageError}
+      storageNotice={storageNotice}
       onDismissStorageError={clearStorageError}
+      onDismissStorageNotice={clearStorageNotice}
       onToggleTheme={() => setIsDarkMode((current) => !current)}
       styles={styles}
     />
   );
   const compactHeader = (title) => (
-    <CompactAppBar title={title} darkMode={isDarkMode} storageError={storageError} onDismissStorageError={clearStorageError} onToggleTheme={() => setIsDarkMode((current) => !current)} />
+    <CompactAppBar title={title} darkMode={isDarkMode} storageError={storageError} storageNotice={storageNotice} onDismissStorageError={clearStorageError} onDismissStorageNotice={clearStorageNotice} onToggleTheme={() => setIsDarkMode((current) => !current)} />
   );
 
   return (
@@ -516,6 +632,9 @@ export default function App() {
               onChangeSearch={setHistoryFilter}
               onChangeResultFilter={setHistoryResultFilter}
               onShareReport={handleShareReport}
+              backupHealth={backupHealth}
+              onExportBackup={handleExportBackup}
+              onImportBackup={handleImportBackup}
             />
           ) : activeTab === 'Publicações' ? (
             <PublicationsScreen
@@ -552,6 +671,14 @@ export default function App() {
           }}
         >
         {activeTab === 'Início' && (
+          <>
+          <GlobalSearchPanel
+            query={globalSearchQuery}
+            results={globalSearchResults}
+            darkMode={isDarkMode}
+            onChangeQuery={setGlobalSearchQuery}
+            onSelectResult={handleGlobalSearchResult}
+          />
           <InspectorHome
             inspectorProfile={inspectorProfile}
             profileForm={profileForm}
@@ -573,8 +700,9 @@ export default function App() {
             onDeleteHistory={removeCompassHistory}
             onSimulate={handleCompassSimulation}
             onContinueInspection={() => setActiveTab('Inspeção')}
-            onNewInspection={() => { setActiveTab('Inspeção'); handleBeginAssistedInspection(); }}
+            onNewInspection={handleBeginAssistedInspection}
           />
+          </>
         )}
         {activeTab === 'Inspeção' && (
           <AssistedInspectionScreen
@@ -586,7 +714,8 @@ export default function App() {
             isCapturingLocation={isCapturingLocation}
             storageStatus={storageStatus}
             lastSavedAt={lastSavedAt}
-            onRetrySave={() => retrySave().catch(() => {})}
+            isFinishingInspection={isFinishingInspection}
+            onRetrySave={() => retrySave().catch((error) => Alert.alert('Salvar inspeção', error?.message || 'Não foi possível salvar a inspeção neste dispositivo.'))}
             onBegin={handleBeginAssistedInspection}
             onSelectVesselProfile={(profile) => updateInspectionSection('vessel', profile)}
             onCaptureTiePhoto={() => handleTiePhoto('camera')}

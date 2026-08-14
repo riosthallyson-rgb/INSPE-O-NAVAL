@@ -26,19 +26,29 @@ describe('modelo operacional da inspeção', () => {
     expect(calculateOccupancy('2', '5')).toEqual({ crewCount: '2', passengerCount: '5', totalPersons: 7 });
   });
 
-  test('migra rascunho antigo preenchendo os novos módulos', () => {
-    const migrated = migrateOperationalInspection({ id: 'antiga', vessel: { name: 'NANA' } }, { name: 'Ana' });
+  test('migra rascunho antigo preenchendo os novos módulos e normalizando listas inválidas', () => {
+    const migrated = migrateOperationalInspection({ id: 'antiga', vessel: { name: 'NANA' }, checkItems: 'inválido' }, { name: 'Ana' });
     expect(migrated.vessel.name).toBe('NANA');
     expect(migrated.driver.licenseType).toBe('CHA');
     expect(migrated.findings).toEqual([]);
+    expect(migrated.checkItems).toEqual([]);
   });
 
   test('exige justificativa quando item aplicável é marcado N/A', () => {
     const draft = createInspectionDraft({ inspector: {}, now: new Date('2026-08-08T12:00:00.000Z') });
     draft.currentStep = 7;
-    draft.checkItems = [{ status: 'nao se aplica', notes: '' }];
+    draft.checkItems = [{ status: 'nao se aplica', notes: '', photoRequired: false, evidence: [] }];
     expect(validateInspectionStep(draft)).toContain('Justifique');
     draft.checkItems[0].notes = 'Não instalado neste cenário; pendente de conferência normativa.';
+    expect(validateInspectionStep(draft)).toBe('');
+  });
+
+  test('bloqueia avanço quando evidência configurada como obrigatória ainda não foi anexada', () => {
+    const draft = createInspectionDraft({ inspector: {}, now: new Date('2026-08-08T12:00:00.000Z') });
+    draft.currentStep = 7;
+    draft.checkItems = [{ status: 'conforme', notes: '', photoRequired: true, evidence: [] }];
+    expect(validateInspectionStep(draft)).toContain('evidências fotográficas');
+    draft.checkItems[0].evidence = [{ id: 'foto-1' }];
     expect(validateInspectionStep(draft)).toBe('');
   });
 

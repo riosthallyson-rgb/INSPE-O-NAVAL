@@ -3,7 +3,12 @@ import { migrateInspectionHistory, migrateInspectionRecord } from './inspection'
 import { migrateVesselProfiles } from './vesselProfile';
 import { migrateOperationalInspection } from './inspection/inspectionModel';
 
-export const CURRENT_STORAGE_SCHEMA = 5;
+export const CURRENT_STORAGE_SCHEMA = 6;
+
+const migrateBackupMeta = (value) => ({
+  lastExportedAt: value?.lastExportedAt && Number.isFinite(Date.parse(value.lastExportedAt)) ? value.lastExportedAt : '',
+  lastImportedAt: value?.lastImportedAt && Number.isFinite(Date.parse(value.lastImportedAt)) ? value.lastImportedAt : '',
+});
 
 export const migratePersistedState = (storedState) => {
   if (!storedState || typeof storedState !== 'object') return null;
@@ -25,6 +30,7 @@ export const migratePersistedState = (storedState) => {
     currentInspection: currentInspection
       ? migrateOperationalInspection({ ...currentInspection, inspector: currentInspector }, currentInspector)
       : null,
+    backupMeta: migrateBackupMeta(storedState.backupMeta),
   };
 };
 
@@ -35,4 +41,5 @@ export const createEmptyPersistedState = () => ({
   compassHistory: [],
   history: [],
   currentInspection: null,
+  backupMeta: migrateBackupMeta(null),
 });

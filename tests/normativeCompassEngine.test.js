@@ -15,6 +15,7 @@ describe('Bússola Normativa 2.0', () => {
     expect(result.citations).toEqual([]);
     expect(result.locationAssessment.jurisdictionId).toBe('CPPI');
   });
+
   test('distingue Inspeção Naval de Vistoria com texto oficial citado', async () => {
     const result = await answerNormativeCompass({ question: 'Qual a diferença entre Inspeção Naval e Vistoria?' });
     expect(result.insufficientEvidence).toBe(false);
@@ -34,6 +35,7 @@ describe('Bússola Normativa 2.0', () => {
     expect(result.debug.ruleIds).toContain(ruleId);
     expect(result.citations[0].officialText).toBeTruthy();
   });
+
   test('distingue não portar TIE de não possuir TIE', async () => {
     const notCarried = await answerNormativeCompass({ question: 'A embarcação não porta TIE.' });
     const unregistered = await answerNormativeCompass({ question: 'A embarcação navegando não possui TIE.' });
@@ -85,5 +87,57 @@ describe('Bússola Normativa 2.0', () => {
     expect(apprehension.citations.length).toBeGreaterThan(1);
     const withdrawal = await answerNormativeCompass({ question: 'O que é retirada de tráfego?' });
     expect(withdrawal.citations[0].section).toBe('3.7.3');
+  });
+
+  test('recusa quantidade de coletes quando o contexto de esporte e recreio não foi estabelecido', async () => {
+    const result = await answerNormativeCompass({ question: 'Quantos coletes devem existir para a lotação da embarcação?' });
+    expect(result.answer).toBe(INSUFFICIENT_COMPASS_ANSWER);
+    expect(result.citations).toEqual([]);
+  });
+
+  test('responde quantidade de coletes somente no contexto auditado de esporte e recreio', async () => {
+    const inspection = { id: 'recreio-coletes', context: {}, vessel: { vesselUse: 'Esporte e recreio' } };
+    const result = await answerNormativeCompass({ question: 'Quantos coletes devem existir para a lotação da embarcação?', inspection });
+    expect(result.insufficientEvidence).toBe(false);
+    expect(result.debug.ruleIds).toEqual(['N211_LIFEJACKETS']);
+    expect(result.citations[0]).toMatchObject({ sourceId: 'normam-211', section: 'Anexo 3-B, item 1(e) — Coletes', page: 206 });
+    expect(result.answer).toContain('quantidade de coletes');
+  });
+
+  test('recusa extintores quando a área de navegação não foi estabelecida como mar aberto', async () => {
+    const result = await answerNormativeCompass({ question: 'Qual a dotação de extintores da embarcação?' });
+    expect(result.answer).toBe(INSUFFICIENT_COMPASS_ANSWER);
+    expect(result.citations).toEqual([]);
+  });
+
+  test('não calcula número de extintores fora da tabela auditada mesmo com contexto de mar aberto', async () => {
+    const inspection = { id: 'mar-aberto-1', context: {}, vessel: { navigationArea: 'Mar aberto' } };
+    const result = await answerNormativeCompass({ question: 'Qual a dotação de extintores da embarcação?', inspection });
+    expect(result.insufficientEvidence).toBe(false);
+    expect(result.debug.ruleIds).toEqual(expect.arrayContaining(['N201_EXTINGUISHERS_LOCATION', 'N201_EXTINGUISHERS_TABLE']));
+    expect(result.answer).toContain('quantidade exata depende');
+    expect(result.citations.some((item) => item.page === 605)).toBe(true);
+  });
+
+  test('usa contexto de navegação interior para listas de passageiros', async () => {
+    const inspection = { id: 'interior-1', context: {}, vessel: { navigationArea: 'Interior' } };
+    const result = await answerNormativeCompass({ question: 'A lista de passageiros precisa estar atualizada?', inspection });
+    expect(result.insufficientEvidence).toBe(false);
+    expect(result.debug.ruleIds).toEqual(expect.arrayContaining(['N204_INTERIOR_ARRIVAL_LISTS', 'N204_INTERIOR_DEPARTURE_LISTS']));
+    expect(result.citations.every((item) => item.sourceId === 'normam-204')).toBe(true);
+  });
+
+  test('recusa lista de passageiros genérica quando o contexto interior não foi estabelecido', async () => {
+    const result = await answerNormativeCompass({ question: 'Como deve ser a lista de passageiros?' });
+    expect(result.answer).toBe(INSUFFICIENT_COMPASS_ANSWER);
+    expect(result.citations).toEqual([]);
+  });
+
+  test('responde limite de lotação para esporte e recreio usando TIE ou PRPM como referência', async () => {
+    const inspection = { id: 'recreio-1', context: {}, vessel: { vesselUse: 'Esporte e recreio' } };
+    const result = await answerNormativeCompass({ question: 'Posso exceder a lotação de pessoas?', inspection });
+    expect(result.insufficientEvidence).toBe(false);
+    expect(result.debug.ruleIds).toEqual(['N211_CAPACITY_LIMIT']);
+    expect(result.answer).toContain('TIE ou PRPM');
   });
 });

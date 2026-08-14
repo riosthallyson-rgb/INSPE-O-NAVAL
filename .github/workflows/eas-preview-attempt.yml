@@ -1,0 +1,75 @@
+name: EAS preview attempt
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'agent/finaliza-inspetor-naval'
+    paths:
+      - '.github/workflows/eas-preview-attempt.yml'
+
+jobs:
+  attempt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Validate project before build
+        run: |
+          npx expo install --check > eas-preflight.txt 2>&1
+          npx expo-doctor >> eas-preflight.txt 2>&1
+      - name: Attempt EAS authentication and preview builds
+        shell: bash
+        run: |
+          set +e
+          : > eas-preview-report.txt
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "BLOCKED: repository secret EXPO_TOKEN is not configured." | tee -a eas-preview-report.txt
+            echo "Android preview: not started." >> eas-preview-report.txt
+            echo "iOS preview: not started." >> eas-preview-report.txt
+            exit 0
+          fi
+
+          echo "Checking EAS identity..." | tee -a eas-preview-report.txt
+          npx eas-cli@latest whoami --non-interactive >> eas-preview-report.txt 2>&1
+          whoami_code=$?
+          echo "whoami exit: $whoami_code" >> eas-preview-report.txt
+          if [ $whoami_code -ne 0 ]; then
+            echo "BLOCKED: EXPO_TOKEN was provided but EAS authentication failed." >> eas-preview-report.txt
+            exit 0
+          fi
+
+          echo "Starting Android preview build..." | tee -a eas-preview-report.txt
+          npx eas-cli@latest build --profile preview --platform android --non-interactive --no-wait --json > eas-android-preview.json 2> eas-android-preview.err
+          android_code=$?
+          echo "Android exit: $android_code" >> eas-preview-report.txt
+          cat eas-android-preview.err >> eas-preview-report.txt
+          [ -f eas-android-preview.json ] && cat eas-android-preview.json >> eas-preview-report.txt
+
+          echo "Starting iOS preview build..." | tee -a eas-preview-report.txt
+          npx eas-cli@latest build --profile preview --platform ios --non-interactive --no-wait --json > eas-ios-preview.json 2> eas-ios-preview.err
+          ios_code=$?
+          echo "iOS exit: $ios_code" >> eas-preview-report.txt
+          cat eas-ios-preview.err >> eas-preview-report.txt
+          [ -f eas-ios-preview.json ] && cat eas-ios-preview.json >> eas-preview-report.txt
+      - name: Upload build attempt report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eas-preview-attempt
+          path: |
+            eas-preflight.txt
+            eas-preview-report.txt
+            eas-android-preview.json
+            eas-android-preview.err
+            eas-ios-preview.json
+            eas-ios-preview.err
+          if-no-files-found: ignore
+          retention-days: 7

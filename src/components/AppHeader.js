@@ -1,14 +1,19 @@
 import React from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 import { ErrorBanner } from './ErrorBanner';
+import { getTheme } from '../theme/tokens';
 
 export const AppHeader = ({
   darkMode,
   storageError,
+  storageNotice,
   onDismissStorageError,
+  onDismissStorageNotice,
   onToggleTheme,
   styles,
-}) => (
+}) => {
+  const { colors, radii, spacing, typography } = getTheme(darkMode);
+  return (
   <>
     {storageError ? (
       <ErrorBanner
@@ -16,6 +21,14 @@ export const AppHeader = ({
         onDismiss={onDismissStorageError}
         darkMode={darkMode}
       />
+    ) : null}
+    {storageNotice ? (
+      <View accessibilityRole="alert" style={{ borderWidth: 1, borderColor: colors.border, borderRadius: radii.control, padding: spacing.md, marginBottom: spacing.md, backgroundColor: colors.infoSurface }}>
+        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm }}>
+          <Text style={[typography.caption, { color: colors.text, flex: 1 }]}>{storageNotice}</Text>
+          <TouchableOpacity onPress={onDismissStorageNotice} accessibilityRole="button" accessibilityLabel="Dispensar aviso de armazenamento" style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}><Text style={[typography.label, { color: colors.action }]}>Fechar</Text></TouchableOpacity>
+        </View>
+      </View>
     ) : null}
     <View style={[styles.heroCard, darkMode && styles.heroCardDark]}>
       <View style={styles.heroTopRow}>
@@ -49,4 +62,5 @@ export const AppHeader = ({
       </View>
     </View>
   </>
-);
+  );
+};

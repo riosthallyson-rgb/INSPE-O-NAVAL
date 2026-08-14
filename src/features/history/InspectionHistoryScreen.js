@@ -4,6 +4,7 @@ import { Button, Card, EmptyState, SectionHeader, StatusBadge } from '../../comp
 import { formatDate } from '../../domain/report';
 import { getTheme } from '../../theme/tokens';
 import { HistoryInspectionMap } from '../map/HistoryInspectionMap';
+import { DataSafetyPanel } from './DataSafetyPanel';
 
 const resultFilters = ['Todos', 'Conforme', 'Não conforme', 'Em andamento'];
 
@@ -91,6 +92,9 @@ export const InspectionHistoryScreen = ({
   onChangeSearch,
   onChangeResultFilter,
   onShareReport,
+  backupHealth,
+  onExportBackup,
+  onImportBackup,
 }) => {
   const { colors, radii, spacing, typography } = getTheme(isDarkMode);
   const filtering = Boolean(search.trim()) || resultFilter !== 'Todos';
@@ -112,6 +116,13 @@ export const InspectionHistoryScreen = ({
         darkMode={isDarkMode}
       />
       <HistorySummary summary={summary} darkMode={isDarkMode} />
+      <DataSafetyPanel
+        darkMode={isDarkMode}
+        backupHealth={backupHealth}
+        hasHistory={hasStoredHistory}
+        onExportBackup={onExportBackup}
+        onImportBackup={onImportBackup}
+      />
       <Card darkMode={isDarkMode} variant="outlined"><Text style={[typography.bodyStrong, { color: colors.text }]}>Histórico no mapa</Text><Text style={[typography.caption, { color: colors.textMuted, marginTop: spacing.xs }]}>{mappedInspections.length} inspeção(ões) georreferenciada(s) nos resultados atuais. Somente registros deste dispositivo são exibidos.</Text><Button label={showMap ? 'Ocultar mapa' : 'Ver inspeções no mapa'} variant="secondary" disabled={!mappedInspections.length} onPress={() => setShowMap((current) => !current)} darkMode={isDarkMode} style={{ marginTop: spacing.md }} />{showMap && mappedInspections.length ? <View style={{ marginTop: spacing.md }}><HistoryInspectionMap inspections={mappedInspections} darkMode={isDarkMode} />{mappedInspections.length > 50 ? <Text style={[typography.caption, { color: colors.pending, marginTop: spacing.sm }]}>A visualização foi limitada aos 50 primeiros pontos para preservar desempenho e evitar sobreposição excessiva.</Text> : null}</View> : null}</Card>
       <TextInput
         value={search}

@@ -1,4 +1,5 @@
 import { validateTieDocument } from '../tieDocumentValidation';
+import { getMissingRequiredEvidence } from './dynamicChecklist';
 
 export const INSPECTION_STEPS = [
   'Cenário',
@@ -69,7 +70,7 @@ export const createInspectionDraft = ({ inspector, defaultVesselType = '', now =
     crew: { ctsRequired: 'confirmar', ctsExists: '', ctsPresented: '', requiredCount: '', members: [] },
     occupancy: { authorized: '', crewCount: '', passengerCount: '', totalPersons: 0 },
     documents: [],
-    applicability: { applicableNorms: [], checklistModules: [], warnings: [], additionalQuestions: [] },
+    applicability: { context: {}, applicableNorms: [], missingSources: [], checklistModules: [], warnings: [], additionalQuestions: [] },
     checkItems: [],
     findings: [],
     nonConformities: [],
@@ -112,7 +113,9 @@ export const migrateOperationalInspection = (record, inspector) => {
     occupancy: { ...base.occupancy, ...(record.occupancy || {}) },
     documents: Array.isArray(record.documents) ? record.documents : [],
     applicability: { ...base.applicability, ...(record.applicability || {}) },
+    checkItems: Array.isArray(record.checkItems) ? record.checkItems : [],
     findings: Array.isArray(record.findings) ? record.findings : [],
+    nonConformities: Array.isArray(record.nonConformities) ? record.nonConformities : [],
     administrativeProcedures: Array.isArray(record.administrativeProcedures) ? record.administrativeProcedures : [],
     vesselCustody: record.vesselCustody || null,
     auditLog: Array.isArray(record.auditLog) ? record.auditLog : [],
@@ -132,7 +135,8 @@ export const validateInspectionStep = (inspection) => {
     if (tieValidation?.missingFields.length) return `Complete os campos obrigatórios do TIE: ${tieValidation.missingFields.join(', ')}.`;
   }
   if (inspection.currentStep === 7 && inspection.checkItems.some((item) => item.status === 'nao verificado')) return 'Avalie todos os itens antes de continuar.';
-  if (inspection.currentStep === 7 && inspection.checkItems.some((item) => item.status === 'nao se aplica' && !item.notes.trim())) return 'Justifique os itens marcados como não aplicáveis.';
-  if (inspection.currentStep === 8 && inspection.findings.some((finding) => !finding.observedDescription.trim())) return 'Descreva objetivamente todas as não conformidades.';
+  if (inspection.currentStep === 7 && inspection.checkItems.some((item) => item.status === 'nao se aplica' && !String(item.notes || '').trim())) return 'Justifique os itens marcados como não aplicáveis.';
+  if (inspection.currentStep === 7 && getMissingRequiredEvidence(inspection.checkItems).length) return 'Adicione as evidências fotográficas marcadas como obrigatórias antes de continuar.';
+  if (inspection.currentStep === 8 && inspection.findings.some((finding) => !String(finding.observedDescription || '').trim())) return 'Descreva objetivamente todas as não conformidades.';
   return '';
 };

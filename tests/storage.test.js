@@ -1,5 +1,5 @@
 import * as FileSystem from 'expo-file-system/legacy';
-import { loadStoredData, saveStoredData } from '../src/infrastructure/storage';
+import { loadStoredData, loadStoredDataDetailed, saveStoredData } from '../src/infrastructure/storage';
 
 jest.mock('expo-file-system/legacy', () => ({
   documentDirectory: 'file:///documents/',
@@ -16,13 +16,22 @@ describe('armazenamento local', () => {
     jest.clearAllMocks();
   });
 
-  test('recupera o backup quando o arquivo principal está corrompido', async () => {
+  test('recupera o backup quando o arquivo principal está corrompido e expõe a recuperação', async () => {
     FileSystem.getInfoAsync.mockResolvedValue({ exists: true });
     FileSystem.readAsStringAsync
       .mockResolvedValueOnce('{inválido')
       .mockResolvedValueOnce('{"name":"Recuperado"}');
 
-    await expect(loadStoredData('perfil', {})).resolves.toEqual({ name: 'Recuperado' });
+    const result = await loadStoredDataDetailed('perfil', {});
+    expect(result.data).toEqual({ name: 'Recuperado' });
+    expect(result.status).toBe('backup');
+    expect(result.error).toBeTruthy();
+  });
+
+  test('mantém API simples para consumidores legados', async () => {
+    FileSystem.getInfoAsync.mockResolvedValue({ exists: true });
+    FileSystem.readAsStringAsync.mockResolvedValueOnce('{"name":"Principal"}');
+    await expect(loadStoredData('perfil', {})).resolves.toEqual({ name: 'Principal' });
   });
 
   test('recupera o backup quando a promoção do arquivo foi interrompida', async () => {
@@ -31,7 +40,8 @@ describe('armazenamento local', () => {
       .mockResolvedValueOnce({ exists: true });
     FileSystem.readAsStringAsync.mockResolvedValueOnce('{"name":"Backup"}');
 
-    await expect(loadStoredData('perfil', {})).resolves.toEqual({ name: 'Backup' });
+    const result = await loadStoredDataDetailed('perfil', {});
+    expect(result).toMatchObject({ data: { name: 'Backup' }, status: 'backup' });
   });
 
   test('valida o arquivo temporário antes de promovê-lo', async () => {

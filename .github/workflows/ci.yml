@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - 'agent/**'
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Expo dependency check
+        run: npx expo install --check 2>&1 | tee expo-install-check.txt
+
+      - name: Expo Doctor
+        run: npx expo-doctor 2>&1 | tee expo-doctor.txt
+
+      - name: Tests
+        shell: bash
+        run: |
+          set +e
+          npm test 2>&1 | tee test-output.txt
+          code=${PIPESTATUS[0]}
+          exit $code
+
+      - name: Resolve Android application bundle
+        run: npx expo export --platform android --output-dir dist-ci 2>&1 | tee expo-export-android.txt
+
+      - name: Production audit
+        if: always()
+        continue-on-error: true
+        run: npm audit --omit=dev > npm-audit-production.txt 2>&1
+
+      - name: Full audit report
+        if: always()
+        continue-on-error: true
+        run: npm audit > npm-audit-full.txt 2>&1
+
+      - name: Upload validation reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-reports
+          path: |
+            expo-install-check.txt
+            expo-doctor.txt
+            test-output.txt
+            expo-export-android.txt
+            npm-audit-production.txt
+            npm-audit-full.txt
+          if-no-files-found: ignore
+          retention-days: 7
