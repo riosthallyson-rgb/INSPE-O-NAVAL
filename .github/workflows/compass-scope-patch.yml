@@ -1,4 +1,4 @@
-name: Apply Compass normative scope patch
+name: Apply final silent-error patch
 
 on:
   push:
@@ -24,18 +24,18 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
-      - name: Restrict equipment answers to audited context
+      - name: Make Compass simulation failure visible
         shell: bash
         run: |
           python - <<'PY'
           from pathlib import Path
-          path = Path('src/legal/compass/normativeCompassEngine.js')
+          path = Path('src/App.js')
           source = path.read_text()
-          old = "  const equipmentTopic = /colete/.test(normalized) && /quantidade|lotacao|pessoa|quantos/.test(normalized) ? 'LIFEJACKETS' : /boia/.test(normalized) ? 'LIFEBUOYS' : /extintor/.test(normalized) ? 'EXTINGUISHER_DOTATION' : '';"
-          new = "  const recreationalScope = /esporte|recreio/.test(normalized) || inspection?.vessel?.vesselUse === 'Esporte e recreio';\n  const openSeaScope = /mar aberto/.test(normalized) || inspection?.vessel?.navigationArea === 'Mar aberto';\n  const equipmentTopic = /colete/.test(normalized) && /quantidade|lotacao|pessoa|quantos/.test(normalized) && recreationalScope ? 'LIFEJACKETS' : /boia/.test(normalized) && recreationalScope ? 'LIFEBUOYS' : /extintor/.test(normalized) && openSeaScope ? 'EXTINGUISHER_DOTATION' : '';"
+          old = "  const handleCompassSimulation = async (operationalState) => {\n    if (isAskingCompass) return;\n    setIsAskingCompass(true);\n    try {\n      const simulated = await askGroundedAssistant({ question, inspection: currentInspection, contextOverrides: { operationalState } });\n      setResult({ ...simulated, isSimulation: true });\n    } finally {\n      setIsAskingCompass(false);\n    }\n  };"
+          new = "  const handleCompassSimulation = async (operationalState) => {\n    if (isAskingCompass) return;\n    setIsAskingCompass(true);\n    try {\n      const simulated = await askGroundedAssistant({ question, inspection: currentInspection, contextOverrides: { operationalState } });\n      setResult({ ...simulated, isSimulation: true });\n    } catch (error) {\n      Alert.alert('Bússola', error?.message || 'Não foi possível simular o cenário localmente.');\n    } finally {\n      setIsAskingCompass(false);\n    }\n  };"
           count = source.count(old)
           if count != 1:
-              raise SystemExit(f'Expected one equipmentTopic expression, found {count}')
+              raise SystemExit(f'Expected one Compass simulation block, found {count}')
           path.write_text(source.replace(old, new))
           PY
       - name: Validate diff
@@ -46,11 +46,11 @@ jobs:
         run: |
           npx expo install --check
           npx expo-doctor
-      - name: Commit validated scope correction
+      - name: Commit validated error handling
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/legal/compass/normativeCompassEngine.js
-          git commit -m "Restringe respostas normativas ao contexto auditado"
+          git add src/App.js
+          git commit -m "Exibe falha na simulação da Bússola"
           git push origin HEAD:agent/finaliza-inspetor-naval
