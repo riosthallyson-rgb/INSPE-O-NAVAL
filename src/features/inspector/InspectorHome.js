@@ -2,6 +2,7 @@ import React from 'react';
 import { Text, TextInput, View } from 'react-native';
 import { Button, Card, SectionHeader } from '../../components';
 import { formatNipForDisplay } from '../../domain/inspector';
+import { getInspectionPendingSummary } from '../../domain/inspectionProgress';
 import { getTheme } from '../../theme/tokens';
 
 const ProfileField = ({ label, darkMode, ...props }) => {
@@ -60,6 +61,7 @@ export const InspectorHome = ({
 }) => {
   const { colors, spacing, typography } = getTheme(isDarkMode);
   const editing = !inspectorProfile.name || isEditingProfile;
+  const pending = getInspectionPendingSummary(currentInspection);
 
   return (
     <View style={{ marginBottom: spacing.xl }}>
@@ -69,6 +71,11 @@ export const InspectorHome = ({
           <Text style={[typography.label, { color: colors.pending }]}>INSPEÇÃO NÃO CONCLUÍDA</Text>
           <Text style={[typography.sectionTitle, { color: colors.text, marginTop: spacing.xs }]}>{currentInspection.vessel?.name || 'Embarcação ainda não identificada'}</Text>
           <Text style={[typography.caption, { color: colors.textMuted, marginTop: spacing.xs }]}>Etapa {currentInspection.currentStep || 1} de 10 · última alteração {new Date(currentInspection.updatedAt || currentInspection.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md }}>
+            <View style={{ minWidth: 96, flexGrow: 1 }}><Text style={[typography.screenTitle, { color: pending.total ? colors.pending : colors.conform }]}>{pending.total}</Text><Text style={[typography.caption, { color: colors.textMuted }]}>pendência(s)</Text></View>
+            <View style={{ minWidth: 96, flexGrow: 1 }}><Text style={[typography.bodyStrong, { color: colors.text }]}>{pending.checklist}</Text><Text style={[typography.caption, { color: colors.textMuted }]}>checklist</Text></View>
+            <View style={{ minWidth: 96, flexGrow: 1 }}><Text style={[typography.bodyStrong, { color: colors.text }]}>{pending.requiredEvidence}</Text><Text style={[typography.caption, { color: colors.textMuted }]}>foto(s) obrigatória(s)</Text></View>
+          </View>
           <Button label="Continuar inspeção" onPress={onContinueInspection} darkMode={isDarkMode} style={{ marginTop: spacing.lg }} />
         </Card>
       ) : (
