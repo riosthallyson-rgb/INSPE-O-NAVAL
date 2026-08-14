@@ -48,14 +48,20 @@ export const evaluateInspectionApplicability = (input = {}) => {
     checklistModules.push('transporte');
   }
 
-  if (input.jurisdiction) {
+  const confirmedJurisdiction = input.jurisdictionConfirmed === true
+    ? String(input.jurisdiction || '').trim().toUpperCase()
+    : '';
+
+  if (confirmedJurisdiction) {
     checklistModules.push('regional');
     addMissingSource(
       missingSources,
       warnings,
       'regional',
-      'A regra regional da jurisdição ainda precisa ser cadastrada e validada. Continue somente com as normas nacionais disponíveis.',
+      'A jurisdição foi confirmada, mas a regra regional correspondente ainda não está cadastrada e validada neste dispositivo. Continue somente com as normas nacionais disponíveis.',
     );
+  } else if (input.jurisdiction) {
+    warnings.push('A jurisdição informada não foi usada para selecionar regra regional porque ainda não foi confirmada no contexto desta inspeção.');
   }
 
   if (!input.operationalState) additionalQuestions.push('Informe a situação operacional da embarcação.');
@@ -73,7 +79,8 @@ export const evaluateInspectionApplicability = (input = {}) => {
       propulsion: input.propulsion || '',
       passengerCapacity: input.passengerCapacity || '',
       peopleOnBoard: input.peopleOnBoard || 0,
-      jurisdiction: input.jurisdiction || '',
+      jurisdiction: confirmedJurisdiction,
+      jurisdictionConfirmed: Boolean(confirmedJurisdiction),
     },
     applicableNorms: unique(applicableNorms),
     missingSources: unique(missingSources),
