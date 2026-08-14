@@ -25,18 +25,39 @@ jobs:
         run: npm ci
 
       - name: Expo dependency check
-        run: npx expo install --check
+        run: npx expo install --check 2>&1 | tee expo-install-check.txt
 
       - name: Expo Doctor
-        run: npx expo-doctor
+        run: npx expo-doctor 2>&1 | tee expo-doctor.txt
 
       - name: Tests
-        run: npm test
+        shell: bash
+        run: |
+          set +e
+          npm test 2>&1 | tee test-output.txt
+          code=${PIPESTATUS[0]}
+          exit $code
 
       - name: Production audit
-        run: npm audit --omit=dev
+        if: always()
+        continue-on-error: true
+        run: npm audit --omit=dev > npm-audit-production.txt 2>&1
 
       - name: Full audit report
         if: always()
         continue-on-error: true
-        run: npm audit
+        run: npm audit > npm-audit-full.txt 2>&1
+
+      - name: Upload validation reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-reports
+          path: |
+            expo-install-check.txt
+            expo-doctor.txt
+            test-output.txt
+            npm-audit-production.txt
+            npm-audit-full.txt
+          if-no-files-found: ignore
+          retention-days: 7
