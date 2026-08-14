@@ -1,0 +1,55 @@
+name: Android smoke build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'agent/finaliza-inspetor-naval'
+    paths:
+      - '.github/workflows/android-smoke.yml'
+
+jobs:
+  build-and-launch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install JavaScript dependencies
+        run: npm ci
+      - name: Generate Android native project
+        run: npx expo prebuild --platform android --clean --no-install --non-interactive
+      - name: Build installable debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: inspetor-naval-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 7
+      - name: Launch APK in Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: |
+            adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+            adb logcat -c
+            adb shell monkey -p com.bizu.inspetornaval -c android.intent.category.LAUNCHER 1
+            sleep 8
+            echo "Process: $(adb shell pidof com.bizu.inspetornaval)"
+            test -n "$(adb shell pidof com.bizu.inspetornaval)"
+            if adb logcat -d | grep -E "FATAL EXCEPTION: main|AndroidRuntime.*FATAL"; then
+              echo "Fatal Android crash detected"
+              exit 1
+            fi
