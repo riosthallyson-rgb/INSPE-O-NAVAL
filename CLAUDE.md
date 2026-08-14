@@ -1,167 +1,131 @@
-# Contexto do projeto para revisão pelo Claude
+# Contexto técnico do projeto — Inspetor Naval
 
 ## Missão
 
-Você está revisando o projeto **Bizu Inspetor Naval**, um aplicativo React Native/Expo destinado a apoiar inspetores navais durante abordagens, notificações e vistorias. Analise o repositório inteiro antes de sugerir ou implementar mudanças.
+O **Inspetor Naval** é um aplicativo React Native/Expo, offline-first, destinado a apoiar o registro de Inspeções Navais em campo. Antes de alterar o projeto, leia `docs/architecture-decisions.md`, `docs/phase-4-compass-coverage.md`, `docs/test-plan.md`, `src/domain/`, `src/legal/`, `src/infrastructure/` e os fluxos relevantes em `src/features/`.
 
-O objetivo desta revisão é produzir recomendações concretas para melhorar:
+O produto trabalha com dados e decisões sensíveis. Priorize exatidão, rastreabilidade, preservação de evidências, recuperação de dados e linguagem que não substitua a conferência da norma oficial.
 
-1. estabilidade no Expo Go e builds Android/iOS;
-2. arquitetura e manutenibilidade;
-3. experiência do inspetor em campo;
-4. confiabilidade da pesquisa nas normas oficiais;
-5. segurança, privacidade e integridade dos registros;
-6. acessibilidade, desempenho e testes;
-7. preparação para distribuição por EAS Build.
+## Estado técnico atual
 
-Não presuma que o aplicativo usa uma IA remota. A Bússola é uma pesquisa heurística local sobre textos previamente cadastrados.
+- Expo SDK `54`.
+- React `19.1.0`.
+- React Native `0.81.5`.
+- Expo Router como entrypoint (`expo-router/entry`).
+- Plataformas: Android, iOS e web.
+- `app/_layout.js` envolve as rotas em `AppErrorBoundary`.
+- As cinco abas principais ainda usam navegação incremental por `activeTab`; detalhes de publicação usam rota real `publication/[id]`.
+- Jest/jest-expo está configurado e a suíte é obrigatória em qualquer mudança de domínio.
+- CI em `.github/workflows/ci.yml`: `npm ci`, `expo install --check`, Expo Doctor, Jest e relatórios de audit.
+- Não há backend obrigatório, autenticação remota ou sincronização em nuvem.
+- Estado operacional é salvo localmente; mobile usa `expo-file-system/legacy` encapsulado em `src/infrastructure/storage.js`, web usa `localStorage`.
+- Estado persistido é versionado e migrado por `src/domain/persistedState.js`.
+- Escritas são serializadas; arquivo temporário é validado e o anterior é mantido como backup quando possível.
+- Histórico pode ser exportado/importado manualmente em JSON sem servidor externo.
+- Ícone/splash atuais são neutros e não representam marca oficial da Marinha do Brasil.
 
-## Estado técnico confirmado
+## Bússola Normativa
 
-- Expo SDK: `54.0.0` (`expo` instalado na versão `54.0.36` na última validação).
-- React: `19.1.0`.
-- React Native: `0.81.5`.
-- Execução atual: Expo Go por LAN.
-- Plataformas declaradas: Android, iOS e web.
-- Entrada do aplicativo: `App.js`, que apenas exporta `src/App.js`.
-- Não há TypeScript, ESLint, Prettier, Jest ou suíte de testes configurada.
-- Não há backend, autenticação, banco remoto ou sincronização em nuvem.
-- Dados do usuário são persistidos localmente em JSON usando `expo-file-system`; na web, usa-se `localStorage`.
-- Os PDFs oficiais ficam empacotados em `assets/docs/`.
-- A Bússola opera offline sobre `src/data/publications.js`.
-- A validação `npx expo install --check` passou depois da migração para o SDK 54.
-- A última instalação npm reportou 18 vulnerabilidades transitivas: 7 moderadas e 11 altas. Audite antes de recomendar atualizações automáticas e não use `npm audit fix --force` sem analisar mudanças incompatíveis.
+A Bússola **não é uma IA remota**. `src/infrastructure/groundedAssistant.js` chama um motor local em `src/legal/compass/normativeCompassEngine.js`.
 
-## Inventário que deve ser lido
+Regras obrigatórias:
 
-### Configuração e entrada
+1. Nunca gerar artigo, inciso, página, prazo, enquadramento ou medida por conhecimento externo/memória.
+2. Resposta fundamentada exige chunk auditado com fonte, versão, seção e página PDF.
+3. Sem evidência suficiente, devolver `INSUFFICIENT_COMPASS_ANSWER` ou solicitar o contexto necessário.
+4. A presença de um PDF no catálogo não significa que o PDF inteiro foi validado para respostas.
+5. Cada expansão do corpus deve ser precedida por extração/conferência do PDF embarcado e registro de hash SHA-256.
+6. `.github/workflows/pdf-audit.yml` e os scripts em `scripts/` existem para reproduzir a auditoria dos PDFs.
 
-- `package.json`: scripts e dependências do Expo SDK 54.
-- `package-lock.json`: árvore exata das dependências; não precisa ser lido linha a linha, mas deve ser consultado para auditoria.
-- `app.json`: metadados Expo e identificador Android.
-- `eas.json`: configuração atual, limitada a APK Android de produção.
-- `babel.config.js`: preset padrão do Expo.
-- `App.js`: ponto de entrada.
+O corpus atual possui trechos auditados de:
 
-### Código principal
+- RLESTA — Decreto nº 2.596/1998;
+- NORMAM-301/DPC;
+- NORMAM-201/DPC (cobertura parcial);
+- NORMAM-204/DPC (cobertura parcial);
+- NORMAM-211/DPC (cobertura parcial).
 
-- `src/App.js`: aplicação atual completa. É um arquivo monolítico com cerca de 65 KB e concentra:
-  - interface e navegação por abas feita manualmente;
-  - perfil do inspetor;
-  - criação e andamento de inspeções;
-  - checklists por tipo de embarcação;
-  - notificações e não conformidades;
-  - histórico local;
-  - Bússola com pesquisa local;
-  - abertura/compartilhamento de PDFs;
-  - geração e compartilhamento de relatório em PDF;
-  - temas claro e escuro;
-  - todos os estilos em um único `StyleSheet`.
-- `src/App.backup.js`: cópia antiga da interface. Determine se há algum código útil não incorporado; caso contrário, recomende removê-la do código versionado.
-- `src/data/publications.js`: catálogo, trechos, palavras-chave e referências aos PDFs oficiais.
+NORMAM-202, NORMAM-212, NPCP e NPCF não podem ser tratadas como fontes instaladas/validadas enquanto não houver arquivo e corpus auditado correspondente.
 
-### Ferramentas e documentação
+## Barreiras jurídicas
 
-- `scripts/extract-pdfs.js`: extração via `pdf-parse` com caminhos absolutos antigos em `D:/Downloads`.
-- `scripts/extract-pdfs.mjs`: extração via `pdfjs-dist`, também com caminhos absolutos e limite parcial de páginas.
-- `README.md`: documentação geral; o texto aparece com sinais de mojibake/encoding incorreto em algumas leituras.
-- `docs/README.md`: instruções sobre publicações; também deve ser verificado quanto ao encoding.
+Preserve os ADR-005 a ADR-007.
 
-### Documentos embarcados
+- Não conformidade não gera automaticamente Auto de Infração, apreensão, retirada de tráfego, impedimento de saída ou outro procedimento.
+- `legalFindingEngine` só aceita regra com fonte completa.
+- Procedimento administrativo exige confirmação humana e mantém número interno separado do número oficial.
+- Rascunho de documento não é documento emitido.
+- QR lido não autentica documento.
+- Campo extraído por QR/imagem/PDF nunca deve nascer `confirmedByUser: true`.
+- Alteração/regularização de achado deve preservar trilha de auditoria.
 
-- `assets/docs/L9537.pdf`
-- `assets/docs/rlesta.pdf`
-- `assets/docs/normam-201.pdf`
-- `assets/docs/normam-204.pdf`
-- `assets/docs/normam-211.pdf`
-- `assets/docs/normam-301.pdf`
-- `assets/docs/NORTEC-41 REV-1_2.pdf`
+## Inspeção assistida
 
-O conjunto de PDFs ocupa dezenas de megabytes, principalmente `normam-201.pdf`. Avalie o impacto no bundle, instalação, memória e atualizações. Não reproduza conteúdo jurídico extensivamente. Verifique se o texto pesquisável representa fielmente as versões oficiais e se existem datas/versões claras.
+O rascunho operacional tem dez etapas definidas em `src/domain/inspection/inspectionModel.js`:
 
-### Artefatos que não devem orientar a arquitetura
+1. Cenário;
+2. Embarcação;
+3. Condutor;
+4. Tripulação;
+5. Documentação;
+6. Segurança/aplicabilidade;
+7. Inspeção/checklist;
+8. Não conformidades;
+9. Revisão;
+10. Conclusão.
 
-- `node_modules/`: gerado pelo npm.
-- `.expo/`: cache local do Expo.
-- `web-build/`: build web gerado e possivelmente desatualizado.
+O motor de aplicabilidade escolhe **módulos e fontes candidatas**; não declara infrações. `buildDynamicChecklist` só marca `referenceStatus: 'verified'` quando há chunk auditado compatível com o contexto. Os demais itens continuam `pending` e exibem `Fundamentação normativa não localizada.`.
 
-## Fluxos funcionais existentes
+Itens podem exigir evidência fotográfica quando o inspetor ativa `photoRequired`. O avanço deve bloquear apenas nesses itens configurados, sem tornar foto obrigatória globalmente.
 
-1. O usuário cadastra o perfil do inspetor.
-2. Inicia uma inspeção informando embarcação, TIE e tipo.
-3. Preenche um checklist específico e registra observações.
-4. Conclui a vistoria ou notificação.
-5. O registro é salvo no histórico local.
-6. Um relatório HTML pode ser convertido em PDF e compartilhado.
-7. O usuário pesquisa as publicações por pergunta e recebe trechos e citações ranqueados localmente.
-8. Os PDFs anexos podem ser abertos ou compartilhados conforme a plataforma.
+## Documentos e QR
 
-## Pontos de atenção já encontrados
+- `qrPayloadParser.js` aceita JSON, chave/valor e formato posicional reconhecido.
+- Dados de QR estruturado entram como `extractedFields` com confiança alta, mas sem confirmação humana.
+- QR em câmera ao vivo e em imagem importada é suportado.
+- `Camera.scanFromURLAsync` recebe imagem; o app não deve fingir que lê QR diretamente de PDF sem uma etapa real de rasterização compatível com Expo.
+- `officialDocumentVerificationProvider` continua declarando validação oficial indisponível até existir uma integração oficialmente documentada.
 
-Trate estes itens como hipóteses a confirmar no código, não como conclusões definitivas:
+## Segurança e armazenamento
 
-- `src/App.js` tem responsabilidades demais e deve ser dividido por domínio, telas, componentes, serviços, hooks e estilos.
-- A navegação manual por estado pode dificultar back button, deep links, acessibilidade e restauração de estado; avalie Expo Router ou React Navigation.
-- Persistência em arquivos JSON não oferece esquema, migrações, transações, índices nem proteção contra gravações concorrentes/corrompidas.
-- Dados identificáveis do inspetor e registros de fiscalização podem exigir proteção adicional, política de retenção, exportação segura e bloqueio do dispositivo.
-- A pesquisa usa normalização, tokens e pontuação simples. Ela pode retornar texto fora de contexto, não reconhecer flexões/sinônimos e não comprovar artigo/página.
-- A interface usa o nome “Bússola” e deve continuar deixando claro que os resultados são apenas materiais relacionados para conferência.
-- Citações devem apontar de forma verificável para norma, seção/artigo e, quando possível, página/versão.
-- A base textual em `publications.js` parece resumida em comparação com os PDFs. Confirme cobertura e fidelidade.
-- Os scripts de extração não são portáveis por dependerem de `D:/Downloads`.
-- `pdf-parse` e `pdfjs-dist` são ferramentas Node e não deveriam aumentar desnecessariamente o bundle do app móvel; confirme que permanecem apenas como dependências de desenvolvimento.
-- `app.json` possui identificador Android, mas não `ios.bundleIdentifier`.
-- `eas.json` não define perfis claros de development/preview/production para ambas as plataformas.
-- Ícones, splash screen, permissões, política de privacidade, versionamento de build e configuração de updates precisam ser auditados.
-- Não existem testes unitários, de integração ou end-to-end.
-- Não há tratamento centralizado de erros, logs estruturados ou telemetria.
-- Há vários estados e efeitos na raiz; procure condições de corrida durante carregamento e salvamento.
-- Confirme se APIs usadas de `expo-file-system` continuam adequadas no SDK 54 ou se estão em uma camada legada.
-- Confirme o comportamento de abertura de PDF no Expo Go físico em iOS e Android.
-- Avalie listas longas, teclado, safe areas, tamanhos de toque, contraste, Dynamic Type e leitores de tela.
-- O build web versionado pode estar obsoleto e inflar o repositório.
+- Perfil, inspeções, histórico, cadastros e evidências podem conter dados sensíveis.
+- Não introduza envio externo desses dados sem desenho explícito de segurança, consentimento e governança.
+- Não remova backup local, migrações de schema ou avisos de falha de persistência.
+- Evite operações assíncronas que possam substituir estado mais novo por snapshot antigo; salve/avance de forma serializada quando as operações dependem entre si.
+- O painel de segurança de dados mede o diretório local do app e informa idade do último backup manual.
 
-## Restrições de domínio
+## Dependências e vulnerabilidades
 
-- O aplicativo dá suporte a decisões relacionadas à inspeção naval. Recomendações devem priorizar exatidão, rastreabilidade e linguagem que não substitua a leitura da norma oficial.
-- Não invente artigos, regras, procedimentos ou interpretações jurídicas.
-- Preserve a capacidade offline, pois o uso pode ocorrer em campo sem conectividade.
-- Antes de propor nuvem ou IA externa, explique implicações de privacidade, custo, conectividade e governança.
-- Não envie dados pessoais, registros de inspeção ou documentos a serviços externos sem consentimento e desenho explícito de segurança.
-- Mudanças de dependências devem permanecer compatíveis com Expo SDK 54 e Expo Go, a menos que uma migração seja proposta separadamente com justificativa.
+Compatibilidade com Expo SDK 54 é requisito atual. `npm audit` pode reportar vulnerabilidades transitivas cuja correção completa recomenda atualização incompatível do Expo. Não execute `npm audit fix --force` automaticamente.
 
-## Como conduzir a revisão
+Para mudança de dependência:
 
-1. Leia todos os arquivos de configuração e todos os fontes em `src/`, `scripts/` e a documentação.
-2. Execute somente verificações não destrutivas inicialmente, como:
-   - `npx expo install --check`;
-   - `npx expo config --type public`;
-   - `npm audit --omit=dev` e `npm audit`, distinguindo produção de desenvolvimento;
-   - análise estática de imports, APIs obsoletas e arquivos não utilizados.
-3. Não altere arquivos durante a primeira auditoria.
-4. Produza achados com evidência concreta, citando arquivo e linha.
-5. Separe defeitos confirmados de sugestões de produto.
-6. Para cada recomendação, informe benefício, risco, esforço aproximado e dependências.
-7. Apresente primeiro correções críticas e rápidas; depois refatorações estruturais e evolução de produto.
-8. Não proponha uma reescrita total sem demonstrar por que uma migração incremental não atende.
+1. confirmar necessidade real;
+2. usar `npx expo install` quando aplicável;
+3. rodar `npx expo install --check`;
+4. rodar `npx expo-doctor`;
+5. rodar `npm test`;
+6. revisar diferenças de `npm audit --omit=dev` e `npm audit`.
 
-## Formato esperado da resposta
+## Builds
 
-Entregue a revisão em português brasileiro com estas seções:
+`eas.json` possui perfis `development`, `preview` e `production`. O Android `preview` usa APK e produção usa App Bundle.
 
-1. **Resumo executivo** — estado geral e os cinco itens mais importantes.
-2. **Problemas confirmados** — severidade, evidência com arquivo/linha, impacto e correção proposta.
-3. **Arquitetura recomendada** — estrutura incremental de pastas e divisão do monólito.
-4. **Pesquisa e confiabilidade normativa** — como aumentar cobertura, citações e rastreabilidade offline.
-5. **UX e acessibilidade** — melhorias específicas para uso em campo.
-6. **Segurança e privacidade** — ameaças, dados sensíveis e controles recomendados.
-7. **Dependências e Expo/EAS** — compatibilidade, vulnerabilidades e configuração de builds.
-8. **Estratégia de testes** — prioridades e exemplos de casos essenciais.
-9. **Plano em fases** — ações para 1 dia, 1 semana e 1 mês.
-10. **Perguntas ao responsável** — somente decisões de negócio ou domínio que não possam ser inferidas do código.
+Build EAS cloud exige conta Expo/token. iOS físico/TestFlight também exige credenciais Apple. Nunca invente link de build, certificado, provisioning profile ou status de submissão.
 
-Use uma tabela de prioridades com as colunas: `Prioridade`, `Mudança`, `Motivo`, `Esforço`, `Risco` e `Arquivos afetados`.
+Há um workflow manual de tentativa de preview que registra explicitamente bloqueios de autenticação. O README contém os comandos e o passo a passo de instalação.
 
-## Solicitação final ao Claude
+## Qualidade e entrega
 
-Faça agora uma auditoria profunda deste repositório. Não se limite a repetir os pontos de atenção acima: confirme-os no código, encontre problemas adicionais e proponha mudanças práticas e priorizadas. Não modifique o projeto até apresentar a auditoria e receber autorização explícita para implementar um conjunto de mudanças.
+Antes de considerar uma mudança concluída:
+
+- rode a suíte Jest;
+- rode Expo Doctor;
+- verifique compatibilidade das dependências;
+- se tocar em corpus normativo, reproduza a auditoria dos PDFs;
+- se tocar em armazenamento, teste recuperação/concorrência/migração;
+- se tocar em inspeção, teste retomada de rascunho;
+- se tocar em câmera/localização/compartilhamento, valide em build nativo quando as credenciais/ambiente permitirem;
+- não altere testes apenas para esconder um defeito real.
+
+Consulte `docs/test-plan.md` e `docs/release-checklist.md` para o checklist completo de campo e distribuição.
