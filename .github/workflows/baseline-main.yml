@@ -1,0 +1,55 @@
+name: Baseline main
+
+on:
+  push:
+    branches:
+      - 'agent/finaliza-inspetor-naval'
+    paths:
+      - '.github/workflows/baseline-main.yml'
+
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Baseline tests
+        shell: bash
+        run: |
+          set +e
+          npm test 2>&1 | tee baseline-tests.txt
+          echo "test_exit=${PIPESTATUS[0]}" >> baseline-summary.txt
+      - name: Baseline Expo checks
+        shell: bash
+        run: |
+          set +e
+          npx expo install --check > baseline-expo-install.txt 2>&1
+          echo "expo_install_exit=$?" >> baseline-summary.txt
+          npx expo-doctor > baseline-expo-doctor.txt 2>&1
+          echo "expo_doctor_exit=$?" >> baseline-summary.txt
+      - name: Baseline audit
+        shell: bash
+        run: |
+          set +e
+          npm audit --omit=dev > baseline-audit-production.txt 2>&1
+          echo "audit_prod_exit=$?" >> baseline-summary.txt
+          npm audit > baseline-audit-full.txt 2>&1
+          echo "audit_full_exit=$?" >> baseline-summary.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: baseline-main-report
+          path: |
+            baseline-tests.txt
+            baseline-expo-install.txt
+            baseline-expo-doctor.txt
+            baseline-audit-production.txt
+            baseline-audit-full.txt
+            baseline-summary.txt
+          retention-days: 7
