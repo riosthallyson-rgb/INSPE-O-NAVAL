@@ -27,6 +27,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Hash audited PDFs
+        run: sha256sum assets/docs/normam-201.pdf assets/docs/normam-204.pdf assets/docs/normam-211.pdf assets/docs/normam-301.pdf assets/docs/rlesta.pdf > pdf-sha256.txt
+
       - name: Inventory embedded PDFs
         run: node scripts/extract-pdfs.mjs > pdf-inventory.txt
 
@@ -44,6 +47,7 @@ jobs:
         with:
           name: normative-audit
           path: |
+            pdf-sha256.txt
             pdf-inventory.txt
             audit-normam-201.txt
             audit-normam-204.txt
