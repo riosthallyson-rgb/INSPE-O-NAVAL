@@ -16,7 +16,9 @@ const extractQuestionContext = (question, inspection) => {
   const driverStatus = /nao possui habilitacao|sem habilitacao|nao habilitad/.test(normalized) ? 'UNLICENSED' : /nao porta.*(?:cha|cir|habilit)|nao esta portando.*(?:cha|cir|habilit)/.test(normalized) ? 'LICENSE_NOT_CARRIED' : expired ? 'LICENSE_EXPIRED' : '';
   const vesselDocumentStatus = /nao porta.*(?:tie|prpm)|possui.*(?:tie|prpm).*nao.*port/.test(normalized) ? 'REGISTRATION_NOT_CARRIED' : /nao possui.*(?:tie|prpm)|sem (?:tie|prpm)/.test(normalized) ? 'UNREGISTERED' : '';
   const generalTopic = /diferenca.*inspecao.*vistoria|diferenca.*vistoria.*inspecao/.test(normalized) ? 'INSPECTION_SURVEY_DIFFERENCE' : /o que e.*inspecao naval|defina.*inspecao naval/.test(normalized) ? 'NAVAL_INSPECTION_DEFINITION' : /o que e.*vistoria|defina.*vistoria/.test(normalized) ? 'SURVEY_DEFINITION' : /o que e.*embarcacao|defina.*embarcacao/.test(normalized) ? 'VESSEL_DEFINITION' : /quando cabe apreens|hipoteses de apreens/.test(normalized) ? 'APPREHENSION' : /retirada de trafego/.test(normalized) ? 'TRAFFIC_WITHDRAWAL' : /impedimento de saida/.test(normalized) ? 'DEPARTURE_PREVENTION' : '';
-  return { operationalState: state, driverStatus, vesselDocumentStatus, expirationBand, generalTopic, inspectionId: inspection?.id || null, vesselName: inspection?.vessel?.name || '', vesselUse: inspection?.vessel?.vesselUse || '', navigationArea: inspection?.vessel?.navigationArea || '', inspectionLocation: inspection?.context?.inspectionLocation || null, jurisdictionId: inspection?.context?.jurisdictionConfirmedByUser ? inspection.context.jurisdictionId : '', regionalRuleStatus: inspection?.context?.regionalRuleStatus || '' };
+  const equipmentTopic = /colete/.test(normalized) && /quantidade|lotacao|pessoa|quantos/.test(normalized) ? 'LIFEJACKETS' : /boia/.test(normalized) ? 'LIFEBUOYS' : /extintor/.test(normalized) ? 'EXTINGUISHER_DOTATION' : '';
+  const operationalTopic = /transbordo.*(?:pessoal|passageir)|(?:pessoal|passageir).*transbordo/.test(normalized) ? 'PERSONNEL_TRANSFER' : /lista.*passageir|passageir.*lista/.test(normalized) && (/interior|hidrovia/.test(normalized) || inspection?.vessel?.navigationArea === 'Interior') ? 'INTERIOR_PASSENGER_LISTS' : /lotacao|excesso.*pessoa|capacidade.*(?:passageir|pessoa)/.test(normalized) && (/esporte|recreio/.test(normalized) || inspection?.vessel?.vesselUse === 'Esporte e recreio') ? 'RECREATIONAL_CAPACITY' : '';
+  return { operationalState: state, driverStatus, vesselDocumentStatus, expirationBand, generalTopic, equipmentTopic, operationalTopic, inspectionId: inspection?.id || null, vesselName: inspection?.vessel?.name || '', vesselUse: inspection?.vessel?.vesselUse || '', navigationArea: inspection?.vessel?.navigationArea || '', inspectionLocation: inspection?.context?.inspectionLocation || null, jurisdictionId: inspection?.context?.jurisdictionConfirmedByUser ? inspection.context.jurisdictionId : '', regionalRuleStatus: inspection?.context?.regionalRuleStatus || '' };
 };
 
 const buildRuleSelection = (context) => {
@@ -33,6 +35,12 @@ const buildRuleSelection = (context) => {
   if (context.generalTopic === 'APPREHENSION') return ['N301_3_8_1', 'N301_3_9_2', 'N301_3_13_1'];
   if (context.generalTopic === 'TRAFFIC_WITHDRAWAL') return ['N301_3_7_3'];
   if (context.generalTopic === 'DEPARTURE_PREVENTION') return ['N301_3_7_4'];
+  if (context.equipmentTopic === 'LIFEJACKETS') return ['N211_LIFEJACKETS'];
+  if (context.equipmentTopic === 'LIFEBUOYS') return ['N211_LIFEBUOYS'];
+  if (context.equipmentTopic === 'EXTINGUISHER_DOTATION') return ['N201_EXTINGUISHERS_LOCATION', 'N201_EXTINGUISHERS_TABLE'];
+  if (context.operationalTopic === 'RECREATIONAL_CAPACITY') return ['N211_CAPACITY_LIMIT'];
+  if (context.operationalTopic === 'INTERIOR_PASSENGER_LISTS') return ['N204_INTERIOR_ARRIVAL_LISTS', 'N204_INTERIOR_DEPARTURE_LISTS'];
+  if (context.operationalTopic === 'PERSONNEL_TRANSFER') return ['N204_PERSONNEL_TRANSFER'];
   return [];
 };
 
@@ -58,6 +66,12 @@ const directAnswer = (context) => {
   if (context.generalTopic === 'APPREHENSION') return 'O corpus auditado contém diferentes hipóteses de apreensão, entre elas condução sem habilitação, habilitação vencida há mais de cinco anos e embarcação não inscrita. A situação operacional e as ressalvas de cada item precisam ser analisadas; esta consulta geral não determina a medida para um caso concreto.';
   if (context.generalTopic === 'TRAFFIC_WITHDRAWAL') return 'A NORMAM-301 define retirada de tráfego como impedir a continuação da navegação, determinando prioritariamente atracação ou, alternativamente, fundeio em local definido pelo Inspetor. A hipótese de aplicação depende da regra específica do fato.';
   if (context.generalTopic === 'DEPARTURE_PREVENTION') return 'A NORMAM-301 relaciona impedimento de saída a inconformidade verificada em inspeção solicitada para saída, quando a embarcação está atracada, fundeada ou na boia. A adoção depende da hipótese normativa concreta.';
+  if (context.equipmentTopic === 'LIFEJACKETS') return 'Na lista auditada de vistoria inicial da NORMAM-211 para embarcações de esporte e recreio, a quantidade de coletes é conferida em relação à lotação e também são observadas classe, pronta utilização, sinalização e fácil acesso. Confirme o tipo de embarcação e a área de navegação antes de concluir a exigência aplicável.';
+  if (context.equipmentTopic === 'LIFEBUOYS') return 'A lista auditada de vistoria inicial da NORMAM-211 prevê conferência das boias salva-vidas, incluindo suporte e características das retinidas. Use o item citado para conferir o equipamento real; esta resposta não define quantidade fora do contexto da fonte.';
+  if (context.equipmentTopic === 'EXTINGUISHER_DOTATION') return 'A NORMAM-201 auditada remete a dotação e a localização de extintores ao Anexo 4-F, que organiza os requisitos por área da embarcação e classe do extintor. A quantidade exata depende da configuração e da área; consulte a tabela citada em vez de inferir um número pela pergunta.';
+  if (context.operationalTopic === 'RECREATIONAL_CAPACITY') return 'Para embarcação de esporte e recreio, o item auditado da NORMAM-211 proíbe exceder a lotação estabelecida e constante do TIE ou PRPM. Confirme no documento a lotação efetivamente autorizada antes de registrar possível excesso.';
+  if (context.operationalTopic === 'INTERIOR_PASSENGER_LISTS') return 'Nos cenários auditados de navegação interior da NORMAM-204, as listas de tripulantes, passageiros e profissionais não-tripulantes devem permanecer atualizadas e disponíveis para apresentação à Inspeção Naval conforme o Aviso de Entrada ou de Saída aplicável.';
+  if (context.operationalTopic === 'PERSONNEL_TRANSFER') return 'No trecho auditado da NORMAM-204 sobre transbordo de pessoal em águas não abrigadas, são previstos coletes para o pessoal diretamente envolvido, lista de passageiros em terra e a bordo e comunicação VHF entre as embarcações durante a operação.';
   return INSUFFICIENT_COMPASS_ANSWER;
 };
 

@@ -9,6 +9,7 @@ import { getConfirmedDocumentValues } from '../../domain/documents/documentEvide
 import { compareVesselDocument } from '../../domain/documents/vesselDocumentConsistencyEngine';
 import { InspectionLocationCard } from '../map/InspectionLocationCard';
 import { QrDocumentCamera } from '../documents/QrDocumentCamera';
+import { groupChecklistItems } from './checklistSections';
 
 const operationalStates = ['Navegando', 'Atracada', 'Fundeada', 'Na boia', 'Em terra', 'Outro'];
 const operationOrigins = ['Fiscalização de rotina', 'Abordagem em operação', 'Denúncia', 'Operação especial', 'Fiscalização programada', 'Verificação posterior', 'Outro'];
@@ -188,29 +189,100 @@ const DocumentsStep = ({ inspection, darkMode, updateDocument }) => {
 
 const ApplicabilityStep = ({ inspection, darkMode }) => {
   const { colors, spacing, typography } = getTheme(darkMode);
-  return <><Card darkMode={darkMode} variant="warning"><Text style={[typography.bodyStrong, { color: colors.pending }]}>Roteamento de fontes, não fundamentação</Text><Text style={[typography.caption, { color: colors.textMuted, marginTop: spacing.xs }]}>As fontes abaixo são candidatas pelo contexto informado. Somente versões verificadas com item e página podem fundamentar uma decisão.</Text></Card><SectionHeader title="Fontes candidatas" darkMode={darkMode} />{inspection.applicability.applicableNorms.map((norm) => <Card key={norm} darkMode={darkMode} variant="outlined"><Text style={[typography.bodyStrong, { color: colors.text }]}>{norm.toUpperCase()}</Text><StatusBadge status="validacao pendente" darkMode={darkMode} /></Card>)}<SectionHeader title="Módulos selecionados" darkMode={darkMode} /><Text style={[typography.body, { color: colors.textMuted, marginBottom: spacing.lg }]}>{inspection.applicability.checklistModules.join(' · ')}</Text>{inspection.applicability.warnings.map((warning) => <Text key={warning} style={[typography.caption, { color: colors.pending, marginBottom: spacing.sm }]}>{warning}</Text>)}</>;
+  const missing = new Set(inspection.applicability.missingSources || []);
+  return <>
+    <Card darkMode={darkMode} variant="warning">
+      <Text style={[typography.bodyStrong, { color: colors.pending }]}>Roteamento de fontes, não fundamentação</Text>
+      <Text style={[typography.caption, { color: colors.textMuted, marginTop: spacing.xs }]}>As fontes abaixo ajudam a montar o roteiro. Somente itens com referência verificada, versão, seção e página podem fundamentar uma conclusão.</Text>
+    </Card>
+    <SectionHeader title="Fontes disponíveis" darkMode={darkMode} />
+    {(inspection.applicability.applicableNorms || []).map((norm) => <Card key={norm} darkMode={darkMode} variant="outlined"><Text style={[typography.bodyStrong, { color: colors.text }]}>{norm.toUpperCase()}</Text><StatusBadge status="verificado" darkMode={darkMode} /><Text style={[typography.caption, { color: colors.textMuted, marginTop: spacing.xs }]}>Fonte embarcada; a cobertura validada é parcial e depende do item do checklist.</Text></Card>)}
+    {[...missing].map((norm) => <Card key={`missing-${norm}`} darkMode={darkMode} variant="warning"><Text style={[typography.bodyStrong, { color: colors.text }]}>{String(norm).toUpperCase()}</Text><StatusBadge status="validacao pendente" darkMode={darkMode} /><Text style={[typography.caption, { color: colors.pending, marginTop: spacing.xs }]}>Fonte não instalada ou não validada para fundamentação nesta versão.</Text></Card>)}
+    <SectionHeader title="Módulos selecionados" darkMode={darkMode} />
+    <Text style={[typography.body, { color: colors.textMuted, marginBottom: spacing.lg }]}>{inspection.applicability.checklistModules.join(' · ')}</Text>
+    {(inspection.applicability.warnings || []).map((warning) => <Text key={warning} style={[typography.caption, { color: colors.pending, marginBottom: spacing.sm }]}>{warning}</Text>)}
+  </>;
 };
 
 const ChecklistStep = ({ inspection, darkMode, updateChecklistItem, addEvidence, evidenceBusyItem }) => {
   const { colors, spacing, typography } = getTheme(darkMode);
-  return <>{inspection.checkItems.map((item) => <Card key={item.id} darkMode={darkMode} variant={item.status === 'nao verificado' ? 'warning' : 'outlined'}><Text style={[typography.label, { color: colors.textMuted }]}>{item.moduleId.toUpperCase()}</Text><Text style={[typography.bodyStrong, { color: colors.text, marginTop: spacing.xs }]}>{item.text}</Text><View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md }}>{itemStatuses.map(([value, label]) => <Pressable key={value} onPress={() => updateChecklistItem(item.id, { status: value })} style={{ width: '48%', minHeight: 48, justifyContent: 'center', alignItems: 'center', borderRadius: 12, borderWidth: item.status === value ? 2 : 1, borderColor: item.status === value ? colors.action : colors.border, backgroundColor: item.status === value ? colors.infoSurface : colors.surfaceElevated }}><Text style={[typography.label, { color: item.status === value ? colors.primary : colors.textMuted }]}>{label}</Text></Pressable>)}</View><Field label={item.status === 'nao conforme' ? 'Descreva objetivamente o que foi observado' : item.status === 'nao se aplica' ? 'Justificativa obrigatória para N/A' : 'Observação'} value={item.notes} onChangeText={(notes) => updateChecklistItem(item.id, { notes })} darkMode={darkMode} multiline />{item.evidence?.length ? <ScrollView horizontal contentContainerStyle={{ gap: spacing.sm, marginBottom: spacing.md }}>{item.evidence.map((evidence) => <Image key={evidence.id} source={{ uri: evidence.uri }} accessibilityLabel="Evidência fotográfica" style={{ width: 88, height: 88, borderRadius: 10, backgroundColor: colors.surfaceElevated }} />)}</ScrollView> : null}<View style={{ flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md }}><Button label="Fotografar" variant="secondary" loading={evidenceBusyItem === item.id} onPress={() => addEvidence(item.id, 'camera')} darkMode={darkMode} style={{ flex: 1 }} /><Button label="Galeria" variant="secondary" disabled={Boolean(evidenceBusyItem)} onPress={() => addEvidence(item.id, 'library')} darkMode={darkMode} style={{ flex: 1 }} /></View><Text style={[typography.caption, { color: colors.pending }]}>{item.reference}</Text></Card>)}</>;
+  const [pendingOnly, setPendingOnly] = useState(false);
+  const isPending = (item) => item.status === 'nao verificado'
+    || (item.status === 'nao conforme' && !String(item.notes || '').trim())
+    || (item.status === 'nao se aplica' && !String(item.notes || '').trim())
+    || (item.photoRequired && !(item.evidence || []).length);
+  const visibleItems = pendingOnly ? inspection.checkItems.filter(isPending) : inspection.checkItems;
+  const groups = groupChecklistItems(visibleItems);
+  const pendingCount = inspection.checkItems.filter(isPending).length;
+  const evaluatedCount = inspection.checkItems.filter((item) => item.status !== 'nao verificado').length;
+
+  return <>
+    <Card darkMode={darkMode} variant="outlined">
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md, alignItems: 'center' }}>
+        <View style={{ flex: 1 }}>
+          <Text style={[typography.bodyStrong, { color: colors.text }]}>Progresso do checklist</Text>
+          <Text style={[typography.caption, { color: colors.textMuted, marginTop: spacing.xs }]}>{evaluatedCount} de {inspection.checkItems.length} avaliados · {pendingCount} pendência(s)</Text>
+        </View>
+        <Button label={pendingOnly ? 'Mostrar todos' : 'Ir aos pendentes'} variant="secondary" onPress={() => setPendingOnly((value) => !value)} darkMode={darkMode} />
+      </View>
+    </Card>
+    {!groups.length ? <Card darkMode={darkMode} variant="outlined"><Text style={[typography.body, { color: colors.textMuted }]}>Nenhum item pendente nesta etapa.</Text></Card> : null}
+    {groups.map((group) => {
+      const groupEvaluated = group.data.filter(({ item }) => item.status !== 'nao verificado').length;
+      return <View key={group.title}>
+        <SectionHeader title={group.title} description={`${groupEvaluated} de ${group.data.length} avaliados nesta seção`} darkMode={darkMode} />
+        {group.data.map(({ item }) => {
+          const missingDescription = item.status === 'nao conforme' && !String(item.notes || '').trim();
+          const missingPhoto = item.photoRequired && !(item.evidence || []).length;
+          const variant = missingDescription || missingPhoto || item.status === 'nao verificado' ? 'warning' : item.status === 'nao conforme' ? 'danger' : 'outlined';
+          return <Card key={item.id} darkMode={darkMode} variant={variant}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm, alignItems: 'flex-start' }}>
+              <View style={{ flex: 1 }}>
+                <Text style={[typography.label, { color: colors.textMuted }]}>{item.moduleId.toUpperCase()}</Text>
+                <Text style={[typography.bodyStrong, { color: colors.text, marginTop: spacing.xs }]}>{item.text}</Text>
+              </View>
+              {item.referenceStatus === 'verified' ? <StatusBadge status="verificado" darkMode={darkMode} /> : <StatusBadge status="validacao pendente" darkMode={darkMode} />}
+            </View>
+            {missingDescription ? <Text style={[typography.caption, { color: colors.nonConform, marginTop: spacing.sm }]}>Descreva o fato observado antes de avançar.</Text> : null}
+            {missingPhoto ? <Text style={[typography.caption, { color: colors.nonConform, marginTop: spacing.sm }]}>A evidência fotográfica foi marcada como obrigatória e ainda não foi anexada.</Text> : null}
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md }}>
+              {itemStatuses.map(([value, label]) => <Pressable key={value} onPress={() => updateChecklistItem(item.id, { status: value })} accessibilityRole="radio" accessibilityState={{ selected: item.status === value }} style={{ width: '48%', minHeight: 48, justifyContent: 'center', alignItems: 'center', borderRadius: 12, borderWidth: item.status === value ? 2 : 1, borderColor: item.status === value ? colors.action : colors.border, backgroundColor: item.status === value ? colors.infoSurface : colors.surfaceElevated }}><Text style={[typography.label, { color: item.status === value ? colors.primary : colors.textMuted }]}>{label}</Text></Pressable>)}
+            </View>
+            <Field label={item.status === 'nao conforme' ? 'Descreva objetivamente o que foi observado' : item.status === 'nao se aplica' ? 'Justificativa obrigatória para N/A' : 'Observação'} value={item.notes} onChangeText={(notes) => updateChecklistItem(item.id, { notes })} darkMode={darkMode} multiline />
+            {item.evidence?.length ? <ScrollView horizontal contentContainerStyle={{ gap: spacing.sm, marginBottom: spacing.md }}>{item.evidence.map((evidence) => <Image key={evidence.id} source={{ uri: evidence.uri }} accessibilityLabel="Evidência fotográfica" style={{ width: 88, height: 88, borderRadius: 10, backgroundColor: colors.surfaceElevated }} />)}</ScrollView> : null}
+            <View style={{ flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md }}>
+              <Button label="Fotografar" variant="secondary" loading={evidenceBusyItem === item.id} onPress={() => addEvidence(item.id, 'camera')} darkMode={darkMode} style={{ flex: 1 }} />
+              <Button label="Galeria" variant="secondary" disabled={Boolean(evidenceBusyItem)} onPress={() => addEvidence(item.id, 'library')} darkMode={darkMode} style={{ flex: 1 }} />
+            </View>
+            <Button label={item.photoRequired ? 'Foto obrigatória: sim' : item.photoRecommended ? 'Exigir foto neste item' : 'Marcar foto como obrigatória'} variant={item.photoRequired ? 'primary' : 'secondary'} onPress={() => updateChecklistItem(item.id, { photoRequired: !item.photoRequired })} darkMode={darkMode} />
+            <Text style={[typography.caption, { color: item.referenceStatus === 'verified' ? colors.textMuted : colors.pending, marginTop: spacing.sm }]}>{item.reference}</Text>
+          </Card>;
+        })}
+      </View>;
+    })}
+  </>;
 };
 
 const FindingsStep = ({ inspection, darkMode, updateFinding, regularizeFinding }) => {
   const { colors, spacing, typography } = getTheme(darkMode);
-  return inspection.findings.length ? <>{inspection.findings.map((finding, index) => <Card key={finding.id} darkMode={darkMode} variant="warning"><Text style={[typography.label, { color: colors.nonConform }]}>NÃO CONFORMIDADE {index + 1}</Text><Text style={[typography.bodyStrong, { color: colors.text, marginTop: spacing.xs }]}>{finding.itemText}</Text><Field label="Situação observada" value={finding.observedDescription} onChangeText={(observedDescription) => updateFinding(finding.id, { observedDescription })} darkMode={darkMode} multiline /><StatusBadge status={finding.status === 'REGULARIZED' ? 'regularizado' : 'validacao pendente'} darkMode={darkMode} /><Text style={[typography.caption, { color: colors.pending, marginTop: spacing.sm }]}>Fundamentação normativa não localizada.</Text>{finding.status !== 'REGULARIZED' ? <Button label="Regularizado durante a inspeção" variant="secondary" onPress={() => regularizeFinding(finding.id)} darkMode={darkMode} style={{ marginTop: spacing.md }} /> : null}</Card>)}</> : <Card darkMode={darkMode} variant="outlined"><Text style={[typography.body, { color: colors.textMuted }]}>Nenhuma não conformidade registrada.</Text></Card>;
+  const activeFindings = inspection.findings.filter((finding) => finding.status !== 'RETRACTED');
+  const retractedCount = inspection.findings.length - activeFindings.length;
+  return activeFindings.length ? <>{retractedCount ? <Text style={[typography.caption, { color: colors.textMuted, marginBottom: spacing.sm }]}>{retractedCount} achado(s) removido(s) porque o item deixou de estar “não conforme”. A trilha de auditoria foi preservada.</Text> : null}{activeFindings.map((finding, index) => <Card key={finding.id} darkMode={darkMode} variant="warning"><Text style={[typography.label, { color: colors.nonConform }]}>NÃO CONFORMIDADE {index + 1}</Text><Text style={[typography.bodyStrong, { color: colors.text, marginTop: spacing.xs }]}>{finding.itemText}</Text><Field label="Situação observada" value={finding.observedDescription} onChangeText={(observedDescription) => updateFinding(finding.id, { observedDescription })} darkMode={darkMode} multiline /><StatusBadge status={finding.status === 'REGULARIZED' ? 'regularizado' : 'validacao pendente'} darkMode={darkMode} /><Text style={[typography.caption, { color: finding.legalAnalysis?.legalBasis?.length ? colors.textMuted : colors.pending, marginTop: spacing.sm }]}>{finding.legalAnalysis?.legalBasis?.length ? 'Há fonte estruturada associada; confirme o enquadramento antes de qualquer procedimento.' : 'Fundamentação normativa não localizada.'}</Text>{finding.status !== 'REGULARIZED' ? <Button label="Regularizado durante a inspeção" variant="secondary" onPress={() => regularizeFinding(finding.id)} darkMode={darkMode} style={{ marginTop: spacing.md }} /> : null}</Card>)}</> : <Card darkMode={darkMode} variant="outlined"><Text style={[typography.body, { color: colors.textMuted }]}>Nenhuma não conformidade ativa registrada.</Text>{retractedCount ? <Text style={[typography.caption, { color: colors.textMuted, marginTop: spacing.xs }]}>{retractedCount} achado(s) anteriores permanecem somente na trilha de auditoria.</Text> : null}</Card>;
 };
 
 const ReviewStep = ({ inspection, darkMode }) => {
   const { colors, spacing, typography } = getTheme(darkMode);
   const evaluated = inspection.checkItems.filter((item) => item.status !== 'nao verificado').length;
-  const rows = [['Identificação', Boolean(inspection.vessel.name && inspection.vessel.tie)], ['Condutor', Boolean(inspection.driver.name)], ['Tripulação', true], ['Documentação', inspection.documents.every((item) => item.status)], ['Segurança', evaluated === inspection.checkItems.length], ['Não conformidades', inspection.findings.every((item) => item.observedDescription.trim())]];
-  return <>{rows.map(([label, complete]) => <Card key={label} darkMode={darkMode} variant="outlined" style={{ marginBottom: spacing.sm }}><View style={{ flexDirection: 'row', justifyContent: 'space-between' }}><Text style={[typography.bodyStrong, { color: colors.text }]}>{label}</Text><StatusBadge status={complete ? 'conforme' : 'pendente'} darkMode={darkMode} /></View></Card>)}<Card darkMode={darkMode} variant="warning"><Text style={[typography.bodyStrong, { color: colors.pending }]}>Enquadramentos confirmados: 0</Text><Text style={[typography.caption, { color: colors.textMuted, marginTop: spacing.xs }]}>Nenhum enquadramento é permitido enquanto não houver fonte normativa estruturada e validada.</Text></Card></>;
+  const activeFindings = inspection.findings.filter((item) => item.status !== 'RETRACTED');
+  const requiredPhotoComplete = inspection.checkItems.every((item) => !item.photoRequired || (item.evidence || []).length > 0);
+  const rows = [['Identificação', Boolean(inspection.vessel.name && inspection.vessel.tie)], ['Condutor', Boolean(inspection.driver.name)], ['Tripulação', true], ['Documentação', inspection.documents.every((item) => item.status)], ['Segurança', evaluated === inspection.checkItems.length && requiredPhotoComplete], ['Não conformidades', activeFindings.every((item) => String(item.observedDescription || '').trim())]];
+  return <>{rows.map(([label, complete]) => <Card key={label} darkMode={darkMode} variant="outlined" style={{ marginBottom: spacing.sm }}><View style={{ flexDirection: 'row', justifyContent: 'space-between' }}><Text style={[typography.bodyStrong, { color: colors.text }]}>{label}</Text><StatusBadge status={complete ? 'conforme' : 'pendente'} darkMode={darkMode} /></View></Card>)}<Card darkMode={darkMode} variant="warning"><Text style={[typography.bodyStrong, { color: colors.pending }]}>Enquadramentos automáticos: nenhum</Text><Text style={[typography.caption, { color: colors.textMuted, marginTop: spacing.xs }]}>Fontes verificadas servem para conferência. Infração e medida administrativa continuam dependendo de confirmação humana e das barreiras do procedimento.</Text></Card></>;
 };
 
 const ConclusionStep = ({ inspection, darkMode, prepareProcedure }) => {
   const { colors, spacing, typography } = getTheme(darkMode);
-  return <><Card darkMode={darkMode} variant="elevated"><Text style={[typography.sectionTitle, { color: colors.text }]}>Pronta para conclusão</Text><Text style={[typography.body, { color: colors.textMuted, marginTop: spacing.sm }]}>{inspection.vessel.name || 'Embarcação'} · {inspection.checkItems.length} itens · {inspection.findings.length} não conformidades</Text><Text style={[typography.caption, { color: colors.pending, marginTop: spacing.md }]}>O encerramento gera somente um relatório de apoio. Nenhum enquadramento, medida ou documento jurídico será criado automaticamente.</Text></Card><ProcedureCenter inspection={inspection} darkMode={darkMode} onPrepare={prepareProcedure} /></>;
+  const activeFindings = inspection.findings.filter((finding) => finding.status !== 'RETRACTED');
+  return <><Card darkMode={darkMode} variant="elevated"><Text style={[typography.sectionTitle, { color: colors.text }]}>Pronta para conclusão</Text><Text style={[typography.body, { color: colors.textMuted, marginTop: spacing.sm }]}>{inspection.vessel.name || 'Embarcação'} · {inspection.checkItems.length} itens · {activeFindings.length} não conformidade(s) ativa(s)</Text><Text style={[typography.caption, { color: colors.pending, marginTop: spacing.md }]}>O encerramento gera somente um relatório de apoio. Nenhum enquadramento, medida ou documento jurídico será criado automaticamente.</Text></Card><ProcedureCenter inspection={{ ...inspection, findings: activeFindings }} darkMode={darkMode} onPrepare={prepareProcedure} /></>;
 };
 
 export const AssistedInspectionScreen = ({ currentInspection, vesselProfiles = [], isDarkMode, evidenceBusyItem, isPickingTiePhoto, isCapturingLocation, storageStatus, lastSavedAt, onRetrySave, onBegin, onSelectVesselProfile, onCaptureTiePhoto, onSelectTiePhoto, onImportDocumentPdf, onReadDocumentQr, onChangeDocumentEvidence, onApplyConfirmedDocument, onRecalculateDocumentChecklist, onConfirmDocumentDivergence, onCaptureLocation, onConfirmManualLocation, onConfirmJurisdiction, onAskLocationRules, onUpdateSection, onAddCrewMember, onUpdateDocument, onUpdateChecklistItem, onAddEvidence, onUpdateFinding, onRegularizeFinding, onPrepareProcedure, onNext, onBack, onDiscard, onFinish }) => {

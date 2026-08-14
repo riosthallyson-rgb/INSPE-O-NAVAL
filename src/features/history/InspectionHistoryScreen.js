@@ -91,6 +91,9 @@ export const InspectionHistoryScreen = ({
   onChangeSearch,
   onChangeResultFilter,
   onShareReport,
+  backupHealth,
+  onExportBackup,
+  onImportBackup,
 }) => {
   const { colors, radii, spacing, typography } = getTheme(isDarkMode);
   const filtering = Boolean(search.trim()) || resultFilter !== 'Todos';
@@ -112,6 +115,15 @@ export const InspectionHistoryScreen = ({
         darkMode={isDarkMode}
       />
       <HistorySummary summary={summary} darkMode={isDarkMode} />
+      <Card darkMode={isDarkMode} variant={backupHealth?.status === 'stale' || backupHealth?.status === 'never' ? "warning" : "outlined"}>
+        <Text style={[typography.bodyStrong, { color: colors.text }]}>Backup manual local</Text>
+        <Text style={[typography.caption, { color: backupHealth?.status === 'stale' || backupHealth?.status === 'never' ? colors.pending : colors.textMuted, marginTop: spacing.xs }]}>{backupHealth?.message || 'O backup é opcional e permanece sob controle do inspetor.'}</Text>
+        <Text style={[typography.caption, { color: colors.textMuted, marginTop: spacing.xs }]}>A exportação gera um JSON local com histórico e embarcações salvas. Nenhum dado é enviado para servidor.</Text>
+        <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
+          <Button label="Exportar backup" variant="secondary" disabled={!hasStoredHistory} onPress={onExportBackup} darkMode={isDarkMode} style={{ flex: 1 }} />
+          <Button label="Importar backup" variant="secondary" onPress={onImportBackup} darkMode={isDarkMode} style={{ flex: 1 }} />
+        </View>
+      </Card>
       <Card darkMode={isDarkMode} variant="outlined"><Text style={[typography.bodyStrong, { color: colors.text }]}>Histórico no mapa</Text><Text style={[typography.caption, { color: colors.textMuted, marginTop: spacing.xs }]}>{mappedInspections.length} inspeção(ões) georreferenciada(s) nos resultados atuais. Somente registros deste dispositivo são exibidos.</Text><Button label={showMap ? 'Ocultar mapa' : 'Ver inspeções no mapa'} variant="secondary" disabled={!mappedInspections.length} onPress={() => setShowMap((current) => !current)} darkMode={isDarkMode} style={{ marginTop: spacing.md }} />{showMap && mappedInspections.length ? <View style={{ marginTop: spacing.md }}><HistoryInspectionMap inspections={mappedInspections} darkMode={isDarkMode} />{mappedInspections.length > 50 ? <Text style={[typography.caption, { color: colors.pending, marginTop: spacing.sm }]}>A visualização foi limitada aos 50 primeiros pontos para preservar desempenho e evitar sobreposição excessiva.</Text> : null}</View> : null}</Card>
       <TextInput
         value={search}
